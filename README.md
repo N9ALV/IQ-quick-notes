@@ -3,6 +3,8 @@ A local-first markdown editor and viewer for working with AI.
 
 > [!IMPORTANT]
 > **IQ Wealth clients should not use the npm installation instructions below.** IQ Wealth Quick Notes is distributed as an approved, self-contained Windows package with its own Node.js runtime. See [IQ Wealth managed installation and updates](docs/iq-wealth-managed-installation.md).
+>
+> Current approved package: [IQ Wealth Quick Notes 0.1.0 for Windows x64](https://github.com/N9ALV/IQ-quick-notes/releases/tag/quick-notes-v0.1.0). Machine-readable update details and the verified SHA-256 are in [`updates/stable.json`](updates/stable.json).
 
 {==Open one markdown file on your machine. Review it, comment on it, and suggest edits.==}{>>What does this mean?<<}{id="c3" by="user" at="2026-04-30T20:18:51.163Z"}{>>It means Roughdraft works with a normal local Markdown file: you open one .md file from your computer, read it in the app, leave inline comments, and propose edits that are saved back into the Markdown using CriticMarkup.<<}{id="c4" by="AI" at="2026-04-30T20:19:39.000Z" re="c3"}{>>cjool<<}{id="c5" by="user" at="2026-05-07T20:38:25.621Z" re="c4"}
 
