@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "channel": "stable",
+  "product": "IQ Wealth Quick Notes",
+  "version": "0.1.0",
+  "releaseTag": "quick-notes-v0.1.0",
+  "assetName": "IQ-Wealth-Quick-Notes-0.1.0-win-x64.zip",
+  "downloadUrl": "https://github.com/N9ALV/IQ-quick-notes/releases/download/quick-notes-v0.1.0/IQ-Wealth-Quick-Notes-0.1.0-win-x64.zip",
+  "sha256": "e4394258e40baa4bd0ef9dedba4c52052cddb037c262065856b22f8733ad3e64",
+  "size": 40869398,
+  "nodeVersion": "24.18.0",
+  "platform": "win32",
+  "architecture": "x64"
+}
