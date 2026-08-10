@@ -117,8 +117,6 @@
     margin-bottom: 1.05em;
   }
 
-
-
   .tiptap .comment-anchor {
     @apply text-inherit;
     box-decoration-break: clone;

@@ -6,6 +6,10 @@ import { installDevCli } from "../../../scripts/install-dev-cli.mjs";
 
 const tempDirs: string[] = [];
 
+function shellDoubleQuote(value: string) {
+  return `"${value.replace(/["\\$`]/g, "\\$&")}"`;
+}
+
 function createFixtureRepo(basename = "lyon-v2") {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "roughdraft-dev-cli-"));
   tempDirs.push(tempDir);
@@ -56,21 +60,23 @@ describe("installDevCli", () => {
     expect(result.commandName).toBe("roughdraft-dev-lyon-v2");
     expect(wrapperContent).toContain(`# roughdraft-dev-repo-root=${repoRoot}`);
     expect(wrapperContent).toContain(
-      `if [[ -z "\${ROUGHDRAFT_STATE_DIR:-}" ]]; then export ROUGHDRAFT_STATE_DIR="${expectedStateDir}"; fi`,
+      `if [[ -z "\${ROUGHDRAFT_STATE_DIR:-}" ]]; then export ROUGHDRAFT_STATE_DIR=${shellDoubleQuote(expectedStateDir)}; fi`,
     );
     expect(wrapperContent).toContain(
       'export ROUGHDRAFT_DEV_WRAPPER_NAME="roughdraft-dev-lyon-v2"',
     );
     expect(wrapperContent).toContain(
-      `export ROUGHDRAFT_DEV_WRAPPER_PATH="${result.wrapperPath}"`,
+      `export ROUGHDRAFT_DEV_WRAPPER_PATH=${shellDoubleQuote(result.wrapperPath)}`,
     );
     expect(wrapperContent).toContain(
-      `export ROUGHDRAFT_DEV_WRAPPER_REPO_ROOT="${repoRoot}"`,
+      `export ROUGHDRAFT_DEV_WRAPPER_REPO_ROOT=${shellDoubleQuote(repoRoot)}`,
     );
     expect(wrapperContent).toContain(
-      `exec node "${path.join(repoRoot, "packages", "server", "bin", "roughdraft.mjs")}" "$@"`,
+      `exec node ${shellDoubleQuote(path.join(repoRoot, "packages", "server", "bin", "roughdraft.mjs"))} "$@"`,
     );
-    expect(mode).toBe(0o755);
+    if (process.platform !== "win32") {
+      expect(mode).toBe(0o755);
+    }
     expect(result.stateDir).toBe(expectedStateDir);
     expect(warnings).toEqual([]);
   });
