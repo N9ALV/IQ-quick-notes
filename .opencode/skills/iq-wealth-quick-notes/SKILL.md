@@ -34,22 +34,28 @@ For investment and trading decisions, encourage structured notes rather than loo
 
 When a user asks for a plan, checklist, note, or reviewable outline, write it as a Markdown file on disk before asking them to review it.
 
-Open one Markdown file at a time. For the normal review handoff, use exactly one open command and leave it running:
+Open one Markdown file at a time. Open the note without tying the agent's main turn to one long-held HTTP request:
 
 ```bash
-roughdraft open "C:\absolute\path\to\file.md" --json
+roughdraft open "C:\absolute\path\to\file.md" --json --no-watch
 ```
 
-Leave the command running. The wait is intentional. The command exits after the user clicks `I'm done` / `Done Reviewing`, which is the signal to read the file and respond to comments, suggestions, checked to-do items, and text edits.
+Confirm the JSON says `opened: true` and the returned document URL is visible. Then start a separate finite, replayable monitor:
 
-For Hermes specifically, launch this as a background process with completion notification enabled (`notify_on_complete=true`). Otherwise Roughdraft may receive the Done Reviewing event but Hermes will not surface the handoff automatically.
+```bash
+roughdraft watch "C:\absolute\path\to\file.md" --json --timeout 60 --replay --after-sequence 0
+```
+
+For Hermes specifically, launch the watch as a background process with completion notification enabled (`notify_on_complete=true`). On every result, use the returned `nextSequence` for the next `--after-sequence` value.
+
+`timedOut: true` means only that no handoff arrived during that interval. Do not report review completion unless an event was returned. Retained review events survive a normal managed-server restart.
 
 Do not open the bare server URL such as `http://localhost:7373` for a note handoff; that can show the Roughdraft landing page instead of the document. Do not manually open the generated URL as a fallback unless the first open command clearly failed, because running both creates duplicate browser tabs and feels broken. The expected experience is: one note opens once, the user edits it, clicks `I'm done`, and the agent receives the completed review event.
 
-Each review round needs a fresh watcher. If the browser tab is already open and the user only needs the handoff button rearmed, use:
+If the browser tab is already open and the user needs the handoff button rearmed, start another finite watcher using the last returned sequence:
 
 ```bash
-roughdraft watch "C:\absolute\path\to\file.md" --json
+roughdraft watch "C:\absolute\path\to\file.md" --json --timeout 60 --replay --after-sequence <nextSequence>
 ```
 
 For Hermes, also run `watch` as a background process with `notify_on_complete=true`.
@@ -61,6 +67,8 @@ roughdraft open "C:\absolute\path\to\file.md" --no-watch
 ```
 
 After the user finishes a Roughdraft review, read the Markdown file from disk and handle inline comments, suggested changes, checked to-do items, and text edits.
+
+Quick Notes is installed and updated by IQ Wealth. Never run `npm i -g roughdraft`; if the managed command is missing, report a maintenance problem. The Windows application ZIP and this Skill file are separate downloads. Never present the Skill as the application package.
 
 ## Comments And Author Labels
 

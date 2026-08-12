@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultPackageJsonPath = path.resolve(__dirname, "../../../package.json");
 const DEFAULT_PACKAGE_NAME = "roughdraft";
+const MANAGED_PACKAGE_NAME = "iq-wealth-quick-notes-runtime";
 
 interface PackageManifest {
   name?: string;
@@ -150,6 +151,15 @@ export async function resolveUpdateStatus(
   const packageName =
     options.packageName?.trim() || installedPackageInfo.packageName;
   const currentVersion = installedPackageInfo.currentVersion;
+  if (packageName === MANAGED_PACKAGE_NAME) {
+    return {
+      packageName,
+      currentVersion,
+      latestVersion: null,
+      updateAvailable: false,
+      updateCommand: "Managed by IQ Wealth",
+    };
+  }
   const latestVersion = await fetchLatestVersion(
     packageName,
     options.fetchImpl ?? fetch,

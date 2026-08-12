@@ -110,4 +110,31 @@ test.describe("opening local markdown files", () => {
       file: "repeat.md",
     });
   });
+
+  test("keeps the same Markdown document open after a page reload", async ({
+    page,
+  }) => {
+    const filePath = writeProjectFile(
+      projectDir,
+      "reload.md",
+      "# Reloaded Note\n\nThis document must remain open.\n",
+    );
+
+    await openMarkdownFile(page, filePath);
+    await expect(page.getByTestId("rich-text-editor")).toContainText(
+      "This document must remain open.",
+    );
+
+    await page.reload();
+
+    await expect(page.getByTestId("rich-text-editor")).toContainText(
+      "This document must remain open.",
+    );
+    expect(new URL(page.url()).searchParams.get("path")).toBe(filePath);
+
+    logE2eEvent("open-file.reload-preserved", {
+      projectDir,
+      file: "reload.md",
+    });
+  });
 });

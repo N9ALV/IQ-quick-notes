@@ -1028,6 +1028,51 @@ describe("cli", () => {
     });
   });
 
+  it("sends the requested replay sequence to a finite review watch", async () => {
+    const test = createTestDependencies();
+    const documentPath = path.join(projectDir, "sequence.md");
+    fs.writeFileSync(documentPath, "# Sequence\n");
+    let watchBody: Record<string, unknown> | null = null;
+    const deps = {
+      ...test.deps,
+      fetchImpl: async (input: Parameters<typeof fetch>[0], init) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+        if (
+          url.pathname === "/api/review-events/watch" &&
+          typeof init?.body === "string"
+        ) {
+          watchBody = JSON.parse(init.body) as Record<string, unknown>;
+          return new Response(
+            JSON.stringify({ events: [], timedOut: true, nextSequence: 8 }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return test.deps.fetchImpl(input, init);
+      },
+    };
+
+    const exitCode = await runCli(
+      [
+        "watch",
+        documentPath,
+        "--json",
+        "--timeout",
+        "0",
+        "--replay",
+        "--after-sequence",
+        "7",
+      ],
+      deps,
+    );
+
+    expect(exitCode).toBe(1);
+    expect(watchBody).toMatchObject({
+      afterSequence: 7,
+      fromNow: false,
+      timeoutSeconds: 0,
+    });
+  });
+
   it("opens a document and waits for the next review event by default from open --json", async () => {
     const test = createTestDependencies();
     const documentPath = path.join(projectDir, "draft.md");
@@ -1421,7 +1466,9 @@ describe("cli", () => {
     expect(test.logs).toContain(
       "  help agent         Print the agent setup prompt",
     );
-    expect(test.logs).toContain("Agent setup: https://roughdraft.md/setup.md");
+    expect(test.logs).toContain(
+      "Agent setup: https://github.com/N9ALV/IQ-quick-notes/blob/main/docs/iq-wealth-agent-guide.md",
+    );
     expect(test.logs).toContain(
       "Use `roughdraft help agent` for a copyable setup prompt.",
     );
@@ -1434,10 +1481,10 @@ describe("cli", () => {
 
     expect(exitCode).toBe(0);
     expect(test.logs).toContain(
-      "To set up your coding agent, paste this into it:",
+      "To set up your IQ Wealth agent, paste this into it:",
     );
     expect(test.logs).toContain(
-      "Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.",
+      "Use my IQ Wealth-managed Quick Notes installation. Do not install or update Roughdraft with npm. Read https://github.com/N9ALV/IQ-quick-notes/blob/main/docs/iq-wealth-agent-guide.md, open notes with the managed `roughdraft` compatibility command, and use finite replayable watches so a missed handoff can be recovered.",
     );
     expect(test.logs).toContain(
       "This command only prints setup text. It does not edit agent instruction files.",
@@ -1518,7 +1565,7 @@ describe("cli", () => {
 
     expect(exitCode).toBe(0);
     expect(test.logs).toContain(
-      "Live setup instructions: https://roughdraft.md/setup.md",
+      "Live setup instructions: https://github.com/N9ALV/IQ-quick-notes/blob/main/docs/iq-wealth-agent-guide.md",
     );
   });
 

@@ -169,6 +169,34 @@ test.describe("markdown round-trips", () => {
     });
   });
 
+  test("clicking a rich-text task checkbox saves its checked state to disk", async ({
+    page,
+  }) => {
+    const filePath = writeProjectFile(
+      projectDir,
+      "task-checkbox.md",
+      "# Tasks\n\n- [ ] Review the retirement plan\n",
+    );
+
+    await openMarkdownFile(page, filePath, "rich-text");
+    const checkbox = richTextEditor(page).locator('input[type="checkbox"]');
+    await expect(checkbox).not.toBeChecked();
+
+    await checkbox.click();
+
+    await expect(checkbox).toBeChecked();
+    await expect
+      .poll(() => readProjectFile(projectDir, "task-checkbox.md"))
+      .toContain("- [x]");
+    expect(readProjectFile(projectDir, "task-checkbox.md")).not.toContain(
+      "- [ ]",
+    );
+
+    logE2eEvent("markdown-roundtrip.task-checkbox-saved", {
+      file: "task-checkbox.md",
+    });
+  });
+
   test("save shortcut prevents browser default in rich-text and code modes", async ({
     page,
   }) => {

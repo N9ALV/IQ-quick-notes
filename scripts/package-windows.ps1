@@ -112,8 +112,7 @@ $artifactFileName = "$artifactBaseName.zip"
 $artifactPath = Join-Path $resolvedOutputDirectory $artifactFileName
 $checksumPath = "$artifactPath.sha256"
 $scratchRoot = Join-Path ([IO.Path]::GetTempPath()) "iq-quick-notes-package-$([Guid]::NewGuid().ToString('N'))"
-$archiveRoot = Join-Path $scratchRoot "archive"
-$packageRoot = Join-Path $archiveRoot $artifactBaseName
+$packageRoot = Join-Path $scratchRoot "package"
 $appRoot = Join-Path $packageRoot "app"
 $runtimeRoot = Join-Path $packageRoot "runtime"
 $binRoot = Join-Path $packageRoot "bin"
@@ -232,14 +231,7 @@ try {
   Copy-Item -LiteralPath (Join-Path $expandedNodeRoot "node.exe") -Destination (Join-Path $runtimeRoot "node.exe")
   Copy-Item -LiteralPath (Join-Path $expandedNodeRoot "LICENSE") -Destination (Join-Path $runtimeRoot "NODE-LICENSE.txt")
 
-  $launcherLines = @(
-    "@echo off",
-    "setlocal",
-    'set "IQ_QUICK_NOTES_ROOT=%~dp0.."',
-    '"%IQ_QUICK_NOTES_ROOT%\runtime\node.exe" "%IQ_QUICK_NOTES_ROOT%\app\packages\server\bin\roughdraft.mjs" %*',
-    "exit /b %ERRORLEVEL%"
-  )
-  Write-Utf8File -Path (Join-Path $binRoot "roughdraft.cmd") -Content (($launcherLines -join "`r`n") + "`r`n")
+  Copy-Item -Path (Join-Path $repoRoot "packaging\windows\*") -Destination $binRoot
 
   $releaseManifest = [ordered]@{
     schemaVersion = $packageConfig.schemaVersion
@@ -250,6 +242,8 @@ try {
     architecture = $packageConfig.architecture
     nodeVersion = $packageConfig.nodeVersion
     command = $packageConfig.command
+    agentCommand = $packageConfig.agentCommand
+    fileAssociationInstaller = $packageConfig.fileAssociationInstaller
     releaseTag = $packageConfig.releaseTag
   }
   Write-Utf8File -Path (Join-Path $packageRoot "manifest.json") -Content (($releaseManifest | ConvertTo-Json -Depth 20) + "`n")
@@ -258,9 +252,20 @@ try {
 IQ Wealth Quick Notes $($packageConfig.version)
 
 This is an IQ Wealth-managed runtime package. Clients do not need Node.js,
-Git, npm or pnpm. IQ Wealth should invoke:
+Git, npm or pnpm.
 
-  bin\roughdraft.cmd open "C:\path\to\note.md" --json
+People can open a Markdown file with:
+
+  bin\Quick Notes.cmd "C:\path\to\note.md"
+
+IQ Wealth agents should invoke:
+
+  bin\roughdraft.cmd open "C:\path\to\note.md" --json --no-watch
+
+To add Quick Notes to Windows' Open with list without changing the current
+Markdown default, run:
+
+  bin\Register Quick Notes.cmd
 
 Do not install roughdraft from npm. Updates are supplied as approved,
 version-pinned IQ Wealth Quick Notes packages.
@@ -275,7 +280,7 @@ version-pinned IQ Wealth Quick Notes packages.
     }
   }
   [IO.Compression.ZipFile]::CreateFromDirectory(
-    $archiveRoot,
+    $packageRoot,
     $artifactPath,
     [IO.Compression.CompressionLevel]::Optimal,
     $false

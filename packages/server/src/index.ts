@@ -67,6 +67,7 @@ interface CreateAppOptions {
   fetchImpl?: typeof fetch;
   packageName?: string;
   remoteDocumentToken?: string;
+  reviewEventStorePath?: string;
 }
 
 interface CreateAppResult {
@@ -402,6 +403,7 @@ function listProjectTree(projectDir: string): ProjectTreeListing {
 }
 
 export function createApp(options: CreateAppOptions = {}): CreateAppResult {
+  const startedAt = Date.now();
   const port = options.port ?? ROUGHDRAFT_DEFAULT_PORT;
   const homeDir = options.homeDir ?? os.homedir();
   const serverRoot = path.resolve(options.serverRoot ?? defaultServerRoot);
@@ -414,7 +416,9 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       : null;
   const app = express();
   const openRequestClients = new Set<OpenRequestClient>();
-  const reviewEvents = new ReviewEventQueue();
+  const reviewEvents = new ReviewEventQueue({
+    storePath: options.reviewEventStorePath,
+  });
   const remoteSessions = new Map<string, RemoteSession>();
 
   function isAuthorizedRemoteDocumentRequest(req: Request): boolean {
@@ -700,6 +704,11 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     const afterSequence =
       typeof req.body?.afterSequence === "number" ? req.body.afterSequence : 0;
 
+    res.status(200);
+    res.type("json");
+    res.set("Cache-Control", "no-store");
+    res.flushHeaders?.();
+
     const result = await reviewEvents.wait({
       documentPath: target.absolutePath,
       afterSequence: fromNow ? reviewEvents.latestSequence() : afterSequence,
@@ -708,7 +717,28 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       batchWindowMs: batchWindowSeconds * 1000,
     });
 
-    res.json(result);
+    res.end(JSON.stringify(result));
+  });
+
+  app.get("/api/review-events/after", (req, res) => {
+    const target = markdownPathFromRequest(req, res);
+    if (!target) return;
+
+    const requestedSequence =
+      typeof req.query.afterSequence === "string"
+        ? Number(req.query.afterSequence)
+        : 0;
+    const afterSequence = Number.isSafeInteger(requestedSequence)
+      ? Math.max(0, requestedSequence)
+      : 0;
+
+    res.set("Cache-Control", "no-store");
+    res.json(
+      reviewEvents.eventsAfter({
+        documentPath: target.absolutePath,
+        afterSequence,
+      }),
+    );
   });
 
   app.get("/api/review-events/status", (req, res) => {
@@ -824,6 +854,21 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
         fileSystemBrowsing: true,
         remoteDocuments: true,
         remoteDocumentTokenRequired: remoteDocumentToken !== null,
+      },
+    });
+  });
+
+  app.get("/api/health", (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json({
+      status: "ok",
+      product: "IQ Wealth Quick Notes",
+      pid: process.pid,
+      port,
+      uptimeSeconds: Math.max(0, (Date.now() - startedAt) / 1000),
+      reviewEvents: {
+        watcherCount: reviewEvents.waiterCount(),
+        latestSequence: reviewEvents.latestSequence(),
       },
     });
   });
@@ -1259,6 +1304,13 @@ export async function createServer(
 ): Promise<void> {
   const bindHosts = resolveBindHosts();
   const remoteDocumentToken = process.env[ROUGHDRAFT_TOKEN_ENV] ?? "";
+  const explicitStateDir = process.env.ROUGHDRAFT_STATE_DIR?.trim();
+  const explicitStateFile = process.env.ROUGHDRAFT_STATE_FILE?.trim();
+  const reviewEventStateDir = explicitStateDir
+    ? path.resolve(explicitStateDir)
+    : explicitStateFile
+      ? path.dirname(path.resolve(explicitStateFile))
+      : path.join(os.homedir(), ".roughdraft");
 
   if (hasNonLoopbackHost(bindHosts) && remoteDocumentToken.length === 0) {
     throw new Error(
@@ -1275,6 +1327,7 @@ export async function createServer(
   const { app } = createApp({
     port,
     projectDir,
+    reviewEventStorePath: path.join(reviewEventStateDir, "review-events.json"),
     remoteDocumentToken:
       remoteDocumentToken.length > 0 ? remoteDocumentToken : undefined,
   });

@@ -1,59 +1,33 @@
-## Roughdraft
+## IQ Wealth Quick Notes
 
-Use Roughdraft when the user wants to review or comment on a Markdown file.
+Use IQ Wealth's managed Quick Notes installation for short local Markdown
+notes, checklists and review handoffs. Do not install or update Roughdraft from
+npm, Git or another public source.
 
-The user may refer to Roughdraft as `rd` in natural language. Treat `rd` as shorthand for Roughdraft in user requests, but do not create or modify any shell alias, executable, symlink, or command named `rd`.
+Open one Markdown file at a time and return control immediately:
 
-When the user asks for a plan, write the plan as a Markdown file on disk before asking them to review it.
-
-When you write or modify a Markdown file and want the user to review or comment on it, open it with:
-
-```bash
-roughdraft open "/absolute/path/to/file.md"
+```powershell
+roughdraft open "C:\absolute\path\to\note.md" --json --no-watch
 ```
 
-Roughdraft is currently a single-file Markdown viewer/editor. Open one `.md` file at a time.
+Monitor the review separately with a finite, replayable request:
 
-If Roughdraft is not running, `roughdraft open` will start it automatically.
-
-After `roughdraft open` opens the document, leave the command running. Do not interrupt, kill, background, detach, or treat the waiting process as cleanup. The wait is intentional: Roughdraft will exit the command after the user clicks Done Reviewing, and that exit is your signal to resume.
-
-After the user finishes reviewing in Roughdraft, read the Markdown file from disk and respond to any CriticMarkup comments or suggested changes.
-
-Use Roughdraft-flavored CriticMarkup when reading or writing inline review feedback in Markdown. The base markers are:
-
-Comment: `{>>comment<<}`
-Insertion: `{++new text++}`
-Deletion: `{--old text--}`
-Substitution: `{~~old~>new~~}`
-Highlight: `{==text==}`
-
-When you add a new comment or suggested change, use the extended Roughdraft format with a compact inline reference such as `{#c1}` or `{#s1}`, then add metadata in final YAML endmatter. Generate a stable document-local id (`c1`, `c2`, etc. for comments; `s1`, `s2`, etc. for suggestions), set `by` to your agent or author label, set `at` to the current ISO timestamp, and set `re` when replying to an existing comment or suggestion.
-
-Roughdraft may already have inline attribute blocks after comments and suggestions from older documents. Preserve those attributes unless you are intentionally removing the associated comment or suggestion. For new feedback, prefer compact references plus YAML endmatter.
-
-Anchored comments usually look like `{==selected text==}{>>Comment text<<}{#c1}`. Suggested changes usually look like `{++new text++}{#s1}` or `{~~old text~>new text~~}{#s2}`. Replies live in final YAML endmatter with a `body` and `re` pointer.
-
-Example:
-
-```markdown
-{==selected text==}{>>Comment text<<}{#c1}
-{++new text++}{#s1}
-
----
-comments:
-  c1:
-    by: AI
-    at: "2026-04-28T12:00:00.000Z"
-  c2:
-    body: I can make that edit.
-    by: AI
-    at: "2026-04-28T12:05:00.000Z"
-    re: c1
-suggestions:
-  s1:
-    by: AI
-    at: "2026-04-28T12:10:00.000Z"
+```powershell
+roughdraft watch "C:\absolute\path\to\note.md" --json --timeout 60 --replay --after-sequence 0
 ```
 
-Use `roughdraft help` and `roughdraft help criticmarkup` for local command and syntax details.
+On every result, carry the returned `nextSequence` into the next watch. Treat
+`timedOut: true` only as “no handoff during this interval”. Do not claim that
+the review completed unless an event was returned.
+
+After a review event, read the Markdown file from disk again. Checked tasks,
+text edits, comments, suggestions and document-level comments are persisted in
+that file and are the source of truth.
+
+The application ZIP and the IQ Wealth Quick Notes Skill are different
+resources. Never supply the Skill Markdown when a person needs the Windows
+application package.
+
+Full guidance:
+
+https://github.com/N9ALV/IQ-quick-notes/blob/main/docs/iq-wealth-agent-guide.md

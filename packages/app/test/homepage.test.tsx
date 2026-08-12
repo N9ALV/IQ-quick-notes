@@ -10,7 +10,7 @@ import {
 } from "../src/App";
 
 const AGENT_SETUP_PROMPT =
-  "Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.";
+  "Use my IQ Wealth-managed Quick Notes installation. Do not install or update Roughdraft with npm. Read https://github.com/N9ALV/IQ-quick-notes/blob/main/docs/iq-wealth-agent-guide.md and use finite replayable watches so missed handoffs can be recovered.";
 
 function createDomRect({
   left = 0,

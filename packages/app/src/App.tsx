@@ -92,7 +92,7 @@ export function shouldWarnBeforeUnload({
 }
 
 const AGENT_SETUP_PROMPT =
-  "Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.";
+  "Use my IQ Wealth-managed Quick Notes installation. Do not install or update Roughdraft with npm. Read https://github.com/N9ALV/IQ-quick-notes/blob/main/docs/iq-wealth-agent-guide.md and use finite replayable watches so missed handoffs can be recovered.";
 const PREVIEW_DOCUMENT_PATH = "preview.md";
 const PREVIEW_INITIAL_MARKDOWN = [
   "# Live Preview",
@@ -437,8 +437,8 @@ export function Homepage({
                   <DialogHeader>
                     <DialogTitle>Give this to your coding agent</DialogTitle>
                     <DialogDescription>
-                      This prompt tells the agent how to install Roughdraft and
-                      set up the review workflow.
+                      This prompt tells the agent to use the IQ Wealth-managed
+                      Quick Notes installation and reliable review handoffs.
                     </DialogDescription>
                   </DialogHeader>
 

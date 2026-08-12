@@ -34,6 +34,16 @@ export interface WaitForReviewEventsResult {
   nextSequence: number;
 }
 
+export interface ReviewEventQueueOptions {
+  storePath?: string;
+}
+
+interface ReviewEventStore {
+  schemaVersion: 1;
+  nextSequence: number;
+  events: ReviewCompletedEvent[];
+}
+
 interface Waiter {
   options: NormalizedWaitOptions;
   resolve: (result: WaitForReviewEventsResult) => void;
@@ -56,6 +66,10 @@ export class ReviewEventQueue {
   private waiters = new Set<Waiter>();
   private nextSequence = 1;
 
+  constructor(private readonly options: ReviewEventQueueOptions = {}) {
+    this.restore();
+  }
+
   emit(input: ReviewCompletedEventInput): {
     delivered: boolean;
     event: ReviewCompletedEvent;
@@ -69,6 +83,7 @@ export class ReviewEventQueue {
     this.nextSequence += 1;
     this.events.push(event);
     this.events = this.events.slice(-MAX_RETAINED_EVENTS);
+    this.persist();
 
     appendSlog("review-events.emit", {
       documentPath: event.documentPath,
@@ -131,6 +146,19 @@ export class ReviewEventQueue {
     return this.nextSequence - 1;
   }
 
+  eventsAfter(
+    options: Pick<
+      WaitForReviewEventsOptions,
+      "documentPath" | "afterSequence"
+    > = {},
+  ): Pick<WaitForReviewEventsResult, "events" | "nextSequence"> {
+    const normalized = normalizeWaitOptions(options);
+    return {
+      events: this.matchingEvents(normalized),
+      nextSequence: this.nextSequence,
+    };
+  }
+
   waiterCountForDocument(documentPath: string): number {
     const normalizedPath = path.resolve(documentPath);
     return [...this.waiters].filter(
@@ -171,6 +199,87 @@ export class ReviewEventQueue {
     const events = timedOut ? [] : this.matchingEvents(waiter.options);
     waiter.resolve(resultForEvents(events, timedOut, this.nextSequence));
   }
+
+  private restore(): void {
+    const storePath = this.options.storePath;
+    if (!storePath) return;
+
+    try {
+      const stored = JSON.parse(fs.readFileSync(storePath, "utf-8")) as unknown;
+      if (!isReviewEventStore(stored)) return;
+
+      this.events = stored.events.slice(-MAX_RETAINED_EVENTS);
+      const highestSequence = this.events.reduce(
+        (highest, event) => Math.max(highest, event.sequence),
+        0,
+      );
+      this.nextSequence = Math.max(stored.nextSequence, highestSequence + 1);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        appendSlog("review-events.restore-error", {
+          storePath,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  private persist(): void {
+    const storePath = this.options.storePath;
+    if (!storePath) return;
+
+    const store: ReviewEventStore = {
+      schemaVersion: 1,
+      nextSequence: this.nextSequence,
+      events: this.events,
+    };
+
+    try {
+      fs.mkdirSync(path.dirname(storePath), { recursive: true });
+      fs.writeFileSync(storePath, `${JSON.stringify(store)}\n`, "utf-8");
+    } catch (error) {
+      appendSlog("review-events.persist-error", {
+        storePath,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
+function isReviewEventStore(value: unknown): value is ReviewEventStore {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<ReviewEventStore>;
+  return (
+    candidate.schemaVersion === 1 &&
+    typeof candidate.nextSequence === "number" &&
+    Number.isSafeInteger(candidate.nextSequence) &&
+    candidate.nextSequence >= 1 &&
+    Array.isArray(candidate.events) &&
+    candidate.events.every(isReviewCompletedEvent)
+  );
+}
+
+function isReviewCompletedEvent(value: unknown): value is ReviewCompletedEvent {
+  if (!value || typeof value !== "object") return false;
+  const event = value as Partial<ReviewCompletedEvent>;
+  return (
+    event.type === "review.completed" &&
+    typeof event.documentPath === "string" &&
+    typeof event.projectPath === "string" &&
+    typeof event.relativePath === "string" &&
+    typeof event.version === "string" &&
+    typeof event.sequence === "number" &&
+    Number.isSafeInteger(event.sequence) &&
+    event.sequence >= 1 &&
+    typeof event.createdAt === "string" &&
+    !!event.summary &&
+    typeof event.summary.comments === "number" &&
+    typeof event.summary.replies === "number" &&
+    typeof event.summary.suggestions === "number" &&
+    typeof event.summary.unresolved === "number" &&
+    (event.overallComment === undefined ||
+      typeof event.overallComment === "string")
+  );
 }
 
 function normalizeWaitOptions(

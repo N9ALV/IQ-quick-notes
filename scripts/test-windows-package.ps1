@@ -74,7 +74,8 @@ Assert-Condition -Condition ($actualHash -eq $expectedHash) -Message "Package SH
 
 $scratchRoot = Join-Path ([IO.Path]::GetTempPath()) "iq-quick-notes-test-$([Guid]::NewGuid().ToString('N'))"
 $extractRoot = Join-Path $scratchRoot "extract"
-$notePath = Join-Path $scratchRoot "acceptance-note.md"
+$noteDirectory = Join-Path $scratchRoot "Client Notes\August Review"
+$notePath = Join-Path $noteDirectory "Retirement review.md"
 $stateRoot = Join-Path $scratchRoot "state"
 $serverStarted = $false
 $launcherPath = $null
@@ -86,15 +87,17 @@ try {
   New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
   Expand-Archive -LiteralPath $resolvedPackagePath -DestinationPath $extractRoot
 
-  $packageRoots = @(Get-ChildItem -LiteralPath $extractRoot -Directory)
-  Assert-Condition -Condition ($packageRoots.Count -eq 1) -Message "Package must contain exactly one top-level directory."
-  $packageRoot = $packageRoots[0].FullName
+  $packageRoot = $extractRoot
   $manifestPath = Join-Path $packageRoot "manifest.json"
   $launcherPath = Join-Path $packageRoot "bin\roughdraft.cmd"
+  $friendlyOpenerPath = Join-Path $packageRoot "bin\Quick Notes.cmd"
+  $registrationScriptPath = Join-Path $packageRoot "bin\Register-QuickNotesFileOpener.ps1"
   $bundledNodePath = Join-Path $packageRoot "runtime\node.exe"
 
   Assert-Condition -Condition (Test-Path -LiteralPath $manifestPath -PathType Leaf) -Message "manifest.json is missing."
   Assert-Condition -Condition (Test-Path -LiteralPath $launcherPath -PathType Leaf) -Message "roughdraft.cmd is missing."
+  Assert-Condition -Condition (Test-Path -LiteralPath $friendlyOpenerPath -PathType Leaf) -Message "Quick Notes.cmd is missing; Windows clients need a friendly Markdown file opener."
+  Assert-Condition -Condition (Test-Path -LiteralPath $registrationScriptPath -PathType Leaf) -Message "The Windows Open with registration script is missing."
   Assert-Condition -Condition (Test-Path -LiteralPath $bundledNodePath -PathType Leaf) -Message "The bundled Node.js runtime is missing."
   Assert-Condition -Condition (-not (Test-Path -LiteralPath (Join-Path $packageRoot ".git"))) -Message "The package must not contain Git metadata."
   Assert-Condition -Condition (-not (Test-Path -LiteralPath (Join-Path $packageRoot "app\packages\server\src"))) -Message "The package must not contain TypeScript server source."
@@ -102,7 +105,16 @@ try {
   $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
   Assert-Condition -Condition ($manifest.version -eq $packageConfig.version) -Message "Package manifest version does not match packaging/windows-package.json."
   Assert-Condition -Condition ($manifest.nodeVersion -eq $packageConfig.nodeVersion) -Message "Bundled Node.js version does not match packaging/windows-package.json."
+  Assert-Condition -Condition ($manifest.command -eq "bin/Quick Notes.cmd") -Message "The package's user command is not Quick Notes.cmd."
+  Assert-Condition -Condition ($manifest.agentCommand -eq "bin/roughdraft.cmd") -Message "The package's agent compatibility command is missing."
 
+  $registrationOutput = (& powershell -NoProfile -ExecutionPolicy Bypass -File $registrationScriptPath -ValidateOnly 2>&1 | Out-String).Trim()
+  Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "The file opener registration could not validate: $registrationOutput"
+  $registration = $registrationOutput | ConvertFrom-Json
+  Assert-Condition -Condition ($registration.applicationName -eq "IQ Wealth Quick Notes") -Message "The Windows registration has the wrong friendly application name."
+  Assert-Condition -Condition ($registration.openCommand -eq ('"{0}" "%1"' -f $friendlyOpenerPath)) -Message "The Windows registration does not preserve the selected file's complete path."
+
+  New-Item -ItemType Directory -Force -Path $noteDirectory | Out-Null
   [IO.File]::WriteAllText(
     $notePath,
     "# IQ Wealth Quick Notes package acceptance test`n`n- [ ] Opened with the bundled runtime.`n",
@@ -123,6 +135,32 @@ try {
   Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "The packaged launcher failed to report its version."
   Assert-Condition -Condition ($versionOutput -eq $packageConfig.version) -Message "The packaged launcher reported version '$versionOutput' instead of '$($packageConfig.version)'."
 
+  $agentHelp = (& $launcherPath help agent 2>&1 | Out-String).Trim()
+  Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "The packaged agent help failed: $agentHelp"
+  Assert-Condition -Condition ($agentHelp.Contains("IQ Wealth-managed Quick Notes")) -Message "The packaged agent help does not identify the managed Quick Notes installation."
+  Assert-Condition -Condition (-not $agentHelp.Contains("npm i -g roughdraft")) -Message "The packaged agent help still directs clients to the public npm package."
+
+  $startOutput = (& $launcherPath start --json 2>&1 | Out-String).Trim()
+  Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "The packaged detached server start failed: $startOutput"
+  $startResult = $startOutput | ConvertFrom-Json
+  Assert-Condition -Condition ($startResult.running -eq $true) -Message "The packaged detached server did not report a running state."
+  $serverStarted = $true
+
+  $startHealthUrl = [Uri]::new([Uri]$startResult.url, "/api/health")
+  $startHealth = Invoke-RestMethod -UseBasicParsing -Uri $startHealthUrl
+  Assert-Condition -Condition ($startHealth.status -eq "ok") -Message "The detached server start did not reach the Quick Notes health endpoint."
+
+  Push-Location $packageRoot
+  try {
+    $friendlyOpenOutput = (& $friendlyOpenerPath $notePath --no-open --json 2>&1 | Out-String).Trim()
+    $friendlyOpenExitCode = $LASTEXITCODE
+  }
+  finally {
+    Pop-Location
+  }
+  Assert-Condition -Condition ($friendlyOpenExitCode -eq 0) -Message "The Quick Notes file opener failed: $friendlyOpenOutput"
+  $friendlyOpenResult = $friendlyOpenOutput | ConvertFrom-Json
+  Assert-Condition -Condition ($friendlyOpenResult.path -eq [IO.Path]::GetFullPath($notePath)) -Message "The Quick Notes file opener did not preserve the Markdown file's full path."
   $openOutput = (& $launcherPath open $notePath --no-open --no-watch --json 2>&1 | Out-String).Trim()
   Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "The packaged launcher could not open a Markdown file: $openOutput"
   $openResult = $openOutput | ConvertFrom-Json
@@ -133,6 +171,11 @@ try {
   $response = Invoke-WebRequest -UseBasicParsing -Uri $openResult.url
   Assert-Condition -Condition ($response.StatusCode -eq 200) -Message "The packaged app did not return HTTP 200."
   Assert-Condition -Condition ($response.Content.Contains('id="root"')) -Message "The packaged app shell is missing its root element."
+
+  $healthUrl = [Uri]::new([Uri]$openResult.serverUrl, "/api/health")
+  $health = Invoke-RestMethod -UseBasicParsing -Uri $healthUrl
+  Assert-Condition -Condition ($health.status -eq "ok") -Message "The packaged app health endpoint did not report ok."
+  Assert-Condition -Condition ($health.product -eq "IQ Wealth Quick Notes") -Message "The packaged app health endpoint reported the wrong product."
 
   $stopOutput = (& $launcherPath stop --json 2>&1 | Out-String).Trim()
   Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "The packaged launcher could not stop its server: $stopOutput"
@@ -146,6 +189,9 @@ try {
     nodeVersion = $manifest.nodeVersion
     sha256 = $actualHash
     httpStatus = $response.StatusCode
+    healthStatus = $health.status
+    friendlyFileOpener = $true
+    markdownDefaultChanged = $false
     systemNodeRequired = $false
     result = "passed"
   } | ConvertTo-Json

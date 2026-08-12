@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { ReviewEventQueue } from "./review-events";
@@ -18,6 +20,45 @@ function eventInput(documentPath = "/tmp/project/draft.md") {
 }
 
 describe("ReviewEventQueue", () => {
+  it("restores retained events and sequence numbers from its store", async () => {
+    const storeRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "roughdraft-review-events-"),
+    );
+    const storePath = path.join(storeRoot, "review-events.json");
+    const documentPath = path.join(storeRoot, "draft.md");
+
+    try {
+      const originalQueue = new ReviewEventQueue({ storePath });
+      const emitted = originalQueue.emit(eventInput(documentPath));
+
+      const restoredQueue = new ReviewEventQueue({ storePath });
+      const retained = await restoredQueue.wait({
+        documentPath,
+        afterSequence: 0,
+        timeoutMs: 0,
+      });
+      const next = restoredQueue.emit(eventInput(documentPath));
+      const restoredAgain = new ReviewEventQueue({ storePath });
+      const afterSecondEvent = await restoredAgain.wait({
+        documentPath,
+        afterSequence: 1,
+        timeoutMs: 0,
+      });
+
+      expect(retained).toMatchObject({
+        timedOut: false,
+        events: [emitted.event],
+        nextSequence: 2,
+      });
+      expect(next.event.sequence).toBe(2);
+      expect(restoredQueue.latestSequence()).toBe(2);
+      expect(afterSecondEvent.events).toEqual([next.event]);
+      expect(afterSecondEvent.nextSequence).toBe(3);
+    } finally {
+      fs.rmSync(storeRoot, { recursive: true, force: true });
+    }
+  });
+
   it("queues events in creation order", async () => {
     const queue = new ReviewEventQueue();
 

@@ -18,13 +18,14 @@ import {
 import { findAvailablePort } from "./ports.js";
 import { resolveUpdateStatus, type UpdateStatus } from "./update-status.js";
 
-const AGENT_SETUP_URL = "https://roughdraft.md/setup.md";
+const AGENT_SETUP_URL =
+  "https://github.com/N9ALV/IQ-quick-notes/blob/main/docs/iq-wealth-agent-guide.md";
 const ROUGHDRAFT_FLAVORED_MARKDOWN_SPEC_URL =
   "https://roughdraft.md/spec/roughdraft-flavored-markdown.md";
-const AGENT_SETUP_PROMPT = `Install Roughdraft for me using \`npm i -g roughdraft\`, then read ${AGENT_SETUP_URL} and set yourself up to use it.`;
+const AGENT_SETUP_PROMPT = `Use my IQ Wealth-managed Quick Notes installation. Do not install or update Roughdraft with npm. Read ${AGENT_SETUP_URL}, open notes with the managed \`roughdraft\` compatibility command, and use finite replayable watches so a missed handoff can be recovered.`;
 const STATUS_PATH = "/api/status";
 const STATUS_TIMEOUT_MS = 750;
-const SERVER_WAIT_ATTEMPTS = 40;
+const SERVER_WAIT_ATTEMPTS = 100;
 const SERVER_WAIT_DELAY_MS = 150;
 const PROCESS_WAIT_ATTEMPTS = 20;
 const PROCESS_WAIT_DELAY_MS = 150;
@@ -158,6 +159,7 @@ interface ParsedCommandOptions {
 }
 
 interface ParsedWatchOptions {
+  afterSequence?: number;
   batchWindowSeconds: number;
   help: boolean;
   json: boolean;
@@ -467,6 +469,21 @@ function parseWatchOptions(args: string[]): ParsedWatchOptions {
       continue;
     }
 
+    if (arg === "--after-sequence") {
+      const next = takeFlagValue(args, index, arg);
+      parsed.afterSequence = parseNonNegativeInteger(next.value, arg);
+      index = next.nextIndex;
+      continue;
+    }
+
+    if (arg.startsWith("--after-sequence=")) {
+      parsed.afterSequence = parseNonNegativeInteger(
+        arg.slice("--after-sequence=".length),
+        "--after-sequence",
+      );
+      continue;
+    }
+
     if (arg === "--timeout") {
       const next = takeFlagValue(args, index, arg);
       parsed.timeoutSeconds = parsePositiveNumber(next.value, arg);
@@ -535,6 +552,14 @@ function parsePositiveNumber(value: string, flag: string): number {
   const parsed = Number.parseFloat(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
     throw new Error(`${flag} must be a positive number.`);
+  }
+  return parsed;
+}
+
+function parseNonNegativeInteger(value: string, flag: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`${flag} must be a non-negative integer.`);
   }
   return parsed;
 }
@@ -839,7 +864,7 @@ async function printUpdateNoticeIfAvailable(deps: CliDependencies) {
 }
 
 function printHelp(log: (message: string) => void) {
-  log("Roughdraft is a local Markdown review app for AI-assisted workflows.");
+  log("IQ Wealth Quick Notes is a local Markdown review app.");
   log("");
   log("Usage:");
   log("  roughdraft [flags] <command> [args]");
@@ -869,7 +894,7 @@ function printHelp(log: (message: string) => void) {
   log("  roughdraft open ./draft.md --print-url");
   log("  roughdraft open ./draft.md --json");
   log("  roughdraft open ./draft.md --no-watch");
-  log("  roughdraft watch ./draft.md --json");
+  log("  roughdraft watch ./draft.md --json --timeout 60 --replay");
   log("  roughdraft status --json");
   log("");
   log(`Agent setup: ${AGENT_SETUP_URL}`);
@@ -989,6 +1014,7 @@ function printCommandHelp(
     log(
       "  --replay                  Return retained older events if available",
     );
+    log("  --after-sequence <n>      Return only events after sequence n");
     log("  --state-file <path>       Server state file");
     log("  --state-dir <dir>         Directory containing server.json");
     return;
@@ -1031,7 +1057,7 @@ function printCommandHelp(
 }
 
 function printAgentHelp(log: (message: string) => void) {
-  log("To set up your coding agent, paste this into it:");
+  log("To set up your IQ Wealth agent, paste this into it:");
   log("");
   log(AGENT_SETUP_PROMPT);
   log("");
@@ -2126,6 +2152,7 @@ async function runWatch(
   }
   const relativePath = path.relative(target.projectDir, target.openPath);
   const body: {
+    afterSequence?: number;
     projectPath: string;
     path: string;
     timeoutSeconds?: number;
@@ -2139,6 +2166,9 @@ async function runWatch(
   };
   if (options.timeoutSeconds !== undefined) {
     body.timeoutSeconds = options.timeoutSeconds;
+  }
+  if (options.afterSequence !== undefined) {
+    body.afterSequence = options.afterSequence;
   }
 
   const response = await deps.fetchImpl(

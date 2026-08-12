@@ -440,6 +440,33 @@ describe("createApp", () => {
     });
   });
 
+  it("returns retained review events immediately without registering a watcher", async () => {
+    fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
+    const { app } = createApp({
+      homeDir,
+      staticDirPath: projectDir,
+    });
+
+    const emitted = await request(app)
+      .post("/api/review-events")
+      .send({ projectPath: projectDir, path: "draft.md" });
+    const response = await request(app).get("/api/review-events/after").query({
+      projectPath: projectDir,
+      path: "draft.md",
+      afterSequence: 0,
+    });
+    const statusResponse = await request(app)
+      .get("/api/review-events/status")
+      .query({ projectPath: projectDir, path: "draft.md" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      events: [emitted.body.event],
+      nextSequence: 2,
+    });
+    expect(statusResponse.body.watcherCount).toBe(0);
+  });
+
   it("reports active review watchers for a markdown file", async () => {
     fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
     const { app } = createApp({
@@ -471,6 +498,111 @@ describe("createApp", () => {
       .post("/api/review-events")
       .send({ projectPath: projectDir, path: "draft.md" });
     await waitingPromise;
+  });
+
+  it("reports purpose-built health data for the running Quick Notes server", async () => {
+    fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
+    const { app } = createApp({
+      homeDir,
+      port: 4321,
+      staticDirPath: projectDir,
+    });
+
+    await request(app)
+      .post("/api/review-events")
+      .send({ projectPath: projectDir, path: "draft.md" });
+    const waiting = request(app).post("/api/review-events/watch").send({
+      projectPath: projectDir,
+      path: "draft.md",
+      timeoutSeconds: 1,
+      batchWindowSeconds: 0,
+    });
+    const waitingPromise = waiting.then((response) => response);
+    await expect
+      .poll(async () => {
+        const statusResponse = await request(app)
+          .get("/api/review-events/status")
+          .query({ projectPath: projectDir, path: "draft.md" });
+        return statusResponse.body.watcherCount;
+      })
+      .toBe(1);
+
+    try {
+      const response = await request(app).get("/api/health");
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        status: "ok",
+        product: "IQ Wealth Quick Notes",
+        pid: process.pid,
+        port: 4321,
+        reviewEvents: {
+          watcherCount: 1,
+          latestSequence: 1,
+        },
+      });
+      expect(response.body.uptimeSeconds).toEqual(expect.any(Number));
+      expect(response.body.uptimeSeconds).toBeGreaterThanOrEqual(0);
+    } finally {
+      await request(app)
+        .post("/api/review-events")
+        .send({ projectPath: projectDir, path: "draft.md" });
+      await waitingPromise;
+    }
+  });
+
+  it("sends review watch response headers before waiting for an event", async () => {
+    fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
+    const { app } = createApp({
+      homeDir,
+      staticDirPath: projectDir,
+    });
+    const server = app.listen(0);
+    const port = (server.address() as AddressInfo).port;
+    let watchResponsePromise: Promise<Response> | null = null;
+
+    try {
+      watchResponsePromise = fetch(
+        `http://127.0.0.1:${port}/api/review-events/watch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectPath: projectDir,
+            path: "draft.md",
+            timeoutSeconds: 1,
+            batchWindowSeconds: 0,
+          }),
+        },
+      );
+
+      await expect
+        .poll(async () => {
+          const statusResponse = await request(app)
+            .get("/api/review-events/status")
+            .query({ projectPath: projectDir, path: "draft.md" });
+          return statusResponse.body.watcherCount;
+        })
+        .toBe(1);
+
+      const headerState = await Promise.race([
+        watchResponsePromise.then(() => "received" as const),
+        new Promise<"pending">((resolve) =>
+          setTimeout(() => resolve("pending"), 100),
+        ),
+      ]);
+
+      expect(headerState).toBe("received");
+    } finally {
+      await request(app)
+        .post("/api/review-events")
+        .send({ projectPath: projectDir, path: "draft.md" });
+      if (watchResponsePromise) {
+        const watchResponse = await watchResponsePromise;
+        await watchResponse.json();
+      }
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   it("rejects page ids that resolve outside the project directory", async () => {
