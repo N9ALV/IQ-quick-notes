@@ -48,9 +48,11 @@ bin\Quick Notes.cmd "C:\complete\path\to\note.md"
 ```
 
 The launcher resolves the selected file to an absolute path before calling the
-internal CLI and returns after opening rather than holding a console window
-open. This avoids the lost-folder error reported when Windows passed a filename
-to `roughdraft.cmd` directly.
+internal CLI, asks for the complete document URL, passes that exact URL to
+Windows and returns rather than holding a console window open. This preserves
+the selected folder even when another note from a different folder is already
+open. The local server is intentionally stateless across project folders, so a
+safe cross-folder open does not require stopping it first.
 
 Run `bin\Register Quick Notes.cmd` once per user to add IQ Wealth Quick Notes
 to Windows' **Open with** list and Default Apps screen. The script does not
@@ -118,9 +120,10 @@ pnpm run test:package:win
 ```
 
 The package test removes system Node.js from `PATH`, exercises the friendly
-opener with a full path containing spaces, validates the registration command
-without changing the registry, opens a real note, calls `/api/health`, and
-stops the managed server.
+opener with complete paths containing spaces in two different folders,
+validates the exact document URL and reads the second file through the packaged
+server, validates registration without changing the registry, calls
+`/api/health`, and stops the managed server.
 
 ## Manual publishing
 

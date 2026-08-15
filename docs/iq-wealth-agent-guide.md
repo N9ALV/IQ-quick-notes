@@ -26,6 +26,12 @@ Check the JSON result has `opened: true`, then make sure the returned URL is
 visible in the client's browser. A local browser page is expected; no note is
 uploaded by this workflow.
 
+The returned URL and the Markdown file on disk identify the active note. Do
+not infer the current note folder from `/api/status.projectDir`: that field is
+the folder used when the reusable stateless server first started. Opening a
+note from another folder is supported and does not require stopping the
+managed server.
+
 Monitor in a separate or background process with a finite timeout:
 
 ```powershell

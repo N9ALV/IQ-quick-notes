@@ -13,7 +13,7 @@ IQ Wealth normally handles installation and updates.
 The application download is a ZIP named like:
 
 ```text
-IQ-Wealth-Quick-Notes-0.1.1-win-x64.zip
+IQ-Wealth-Quick-Notes-0.1.2-win-x64.zip
 ```
 
 It is not the Quick Notes Skill or instruction Markdown file. If the approved
@@ -41,7 +41,9 @@ Open with > IQ Wealth Quick Notes
 ```
 
 Quick Notes opens in your usual local browser. Opera and IQ Browser are both
-supported by the normal browser workflow.
+supported by the normal browser workflow. Opening a note from a different
+folder uses that note's complete address; you do not need to stop Quick Notes
+or move the file first.
 
 ## Saving checklist changes
 

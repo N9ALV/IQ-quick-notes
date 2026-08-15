@@ -39,6 +39,35 @@ function Assert-SafeChildPath {
   }
 }
 
+function Write-SlogEvent {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Event,
+    [Parameter(Mandatory = $true)]
+    [hashtable]$Data
+  )
+
+  $slogFile = $env:THOUGHTFUL_SLOG_FILE
+  if ([string]::IsNullOrWhiteSpace($slogFile)) {
+    return
+  }
+
+  $slogDirectory = Split-Path -Parent $slogFile
+  New-Item -ItemType Directory -Force -Path $slogDirectory | Out-Null
+  $record = [ordered]@{
+    ts = [DateTimeOffset]::UtcNow.ToString('o')
+    runId = if ([string]::IsNullOrWhiteSpace($env:THOUGHTFUL_SLOG_RUN_ID)) { 'manual' } else { $env:THOUGHTFUL_SLOG_RUN_ID }
+    source = 'scripts/test-windows-package.ps1'
+    event = $Event
+    data = $Data
+  }
+  [IO.File]::AppendAllText(
+    $slogFile,
+    (($record | ConvertTo-Json -Depth 10 -Compress) + "`n"),
+    [Text.UTF8Encoding]::new($false)
+  )
+}
+
 function Get-Sha256 {
   param(
     [Parameter(Mandatory = $true)]
@@ -76,6 +105,8 @@ $scratchRoot = Join-Path ([IO.Path]::GetTempPath()) "iq-quick-notes-test-$([Guid
 $extractRoot = Join-Path $scratchRoot "extract"
 $noteDirectory = Join-Path $scratchRoot "Client Notes\August Review"
 $notePath = Join-Path $noteDirectory "Retirement review.md"
+$secondNoteDirectory = Join-Path $scratchRoot "Client Letters\September Review"
+$secondNotePath = Join-Path $secondNoteDirectory "Pension update.md"
 $stateRoot = Join-Path $scratchRoot "state"
 $serverStarted = $false
 $launcherPath = $null
@@ -107,6 +138,9 @@ try {
   Assert-Condition -Condition ($manifest.nodeVersion -eq $packageConfig.nodeVersion) -Message "Bundled Node.js version does not match packaging/windows-package.json."
   Assert-Condition -Condition ($manifest.command -eq "bin/Quick Notes.cmd") -Message "The package's user command is not Quick Notes.cmd."
   Assert-Condition -Condition ($manifest.agentCommand -eq "bin/roughdraft.cmd") -Message "The package's agent compatibility command is missing."
+  $friendlyOpenerSource = Get-Content -Raw -LiteralPath $friendlyOpenerPath
+  Assert-Condition -Condition ($friendlyOpenerSource.Contains('--print-url --no-watch')) -Message "Quick Notes.cmd does not request the exact document URL for a normal Windows open."
+  Assert-Condition -Condition ($friendlyOpenerSource.Contains('start "" "%IQ_QUICK_NOTES_URL%"')) -Message "Quick Notes.cmd does not pass the exact document URL to Windows."
 
   $registrationOutput = (& powershell -NoProfile -ExecutionPolicy Bypass -File $registrationScriptPath -ValidateOnly 2>&1 | Out-String).Trim()
   Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "The file opener registration could not validate: $registrationOutput"
@@ -118,6 +152,12 @@ try {
   [IO.File]::WriteAllText(
     $notePath,
     "# IQ Wealth Quick Notes package acceptance test`n`n- [ ] Opened with the bundled runtime.`n",
+    [Text.UTF8Encoding]::new($false)
+  )
+  New-Item -ItemType Directory -Force -Path $secondNoteDirectory | Out-Null
+  [IO.File]::WriteAllText(
+    $secondNotePath,
+    "# IQ Wealth Quick Notes second-folder acceptance test`n`n- [ ] Opened after the first folder.`n",
     [Text.UTF8Encoding]::new($false)
   )
 
@@ -150,6 +190,10 @@ try {
   $startHealth = Invoke-RestMethod -UseBasicParsing -Uri $startHealthUrl
   Assert-Condition -Condition ($startHealth.status -eq "ok") -Message "The detached server start did not reach the Quick Notes health endpoint."
 
+  $initialStopOutput = (& $launcherPath stop --json 2>&1 | Out-String).Trim()
+  Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "The packaged launcher could not stop the initial health-check server: $initialStopOutput"
+  $serverStarted = $false
+
   Push-Location $packageRoot
   try {
     $friendlyOpenOutput = (& $friendlyOpenerPath $notePath --no-open --json 2>&1 | Out-String).Trim()
@@ -161,6 +205,47 @@ try {
   Assert-Condition -Condition ($friendlyOpenExitCode -eq 0) -Message "The Quick Notes file opener failed: $friendlyOpenOutput"
   $friendlyOpenResult = $friendlyOpenOutput | ConvertFrom-Json
   Assert-Condition -Condition ($friendlyOpenResult.path -eq [IO.Path]::GetFullPath($notePath)) -Message "The Quick Notes file opener did not preserve the Markdown file's full path."
+  $serverStarted = $true
+
+  $friendlyStatusUrl = [Uri]::new([Uri]$friendlyOpenResult.serverUrl, "/api/status")
+  $friendlyStatus = Invoke-RestMethod -UseBasicParsing -Uri $friendlyStatusUrl
+  Assert-Condition -Condition ($friendlyStatus.projectDir -eq [IO.Path]::GetFullPath($noteDirectory)) -Message "The first Quick Notes open did not start the managed server in the first note's folder."
+  Write-SlogEvent -Event 'windows-package.first-note-opened' -Data @{
+    fullPathPreserved = $friendlyOpenResult.path -eq [IO.Path]::GetFullPath($notePath)
+    statusProjectMatchesStartFolder = $friendlyStatus.projectDir -eq [IO.Path]::GetFullPath($noteDirectory)
+  }
+
+  Push-Location $packageRoot
+  try {
+    $secondFriendlyOpenOutput = (& $friendlyOpenerPath $secondNotePath --no-open --json 2>&1 | Out-String).Trim()
+    $secondFriendlyOpenExitCode = $LASTEXITCODE
+  }
+  finally {
+    Pop-Location
+  }
+  Assert-Condition -Condition ($secondFriendlyOpenExitCode -eq 0) -Message "The second Quick Notes file opener failed: $secondFriendlyOpenOutput"
+  $secondFriendlyOpenResult = $secondFriendlyOpenOutput | ConvertFrom-Json
+  Assert-Condition -Condition ($secondFriendlyOpenResult.path -eq [IO.Path]::GetFullPath($secondNotePath)) -Message "The second Quick Notes open did not preserve the Markdown file's full path."
+
+  $expectedSecondProjectDir = [IO.Path]::GetFullPath($secondNoteDirectory)
+  $secondFriendlyUrl = [Uri]$secondFriendlyOpenResult.url
+  $secondFriendlyQuery = [System.Web.HttpUtility]::ParseQueryString($secondFriendlyUrl.Query)
+  Assert-Condition -Condition ($secondFriendlyQuery['projectPath'] -eq $expectedSecondProjectDir) -Message "The second Quick Notes URL did not preserve the second note's folder."
+  Assert-Condition -Condition ($secondFriendlyQuery['path'] -eq [IO.Path]::GetFileName($secondNotePath)) -Message "The second Quick Notes URL did not preserve the second note's filename."
+
+  $secondFileApiUrl = [Uri]::new(
+    [Uri]$secondFriendlyOpenResult.serverUrl,
+    "/api/markdown-file?projectPath=$([Uri]::EscapeDataString($expectedSecondProjectDir))&path=$([Uri]::EscapeDataString([IO.Path]::GetFileName($secondNotePath)))"
+  )
+  $secondFileResponse = Invoke-RestMethod -UseBasicParsing -Uri $secondFileApiUrl
+  Assert-Condition -Condition ($secondFileResponse.content.Contains('second-folder acceptance test')) -Message "The reused stateless server could not read the note from the second folder."
+  Write-SlogEvent -Event 'windows-package.cross-folder-opened' -Data @{
+    sameServer = $friendlyOpenResult.serverUrl -eq $secondFriendlyOpenResult.serverUrl
+    secondFolderPreserved = $secondFriendlyQuery['projectPath'] -eq $expectedSecondProjectDir
+    secondFilenamePreserved = $secondFriendlyQuery['path'] -eq [IO.Path]::GetFileName($secondNotePath)
+    secondFileRead = $secondFileResponse.content.Contains('second-folder acceptance test')
+  }
+
   $openOutput = (& $launcherPath open $notePath --no-open --no-watch --json 2>&1 | Out-String).Trim()
   Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "The packaged launcher could not open a Markdown file: $openOutput"
   $openResult = $openOutput | ConvertFrom-Json
@@ -183,6 +268,12 @@ try {
   Assert-Condition -Condition ($stopResult.stopped -eq $true) -Message "The packaged server did not report a clean stop."
   $serverStarted = $false
 
+  Write-SlogEvent -Event 'windows-package.acceptance-passed' -Data @{
+    version = [string]$manifest.version
+    healthStatus = [string]$health.status
+    systemNodeRequired = $false
+  }
+
   [PSCustomObject]@{
     package = $resolvedPackagePath
     version = $manifest.version
@@ -190,6 +281,7 @@ try {
     sha256 = $actualHash
     httpStatus = $response.StatusCode
     healthStatus = $health.status
+    crossFolderOpen = $true
     friendlyFileOpener = $true
     markdownDefaultChanged = $false
     systemNodeRequired = $false

@@ -12,11 +12,11 @@ compatibility with existing agent workflows.
 
 ## Approved Windows package
 
-Current release: [IQ Wealth Quick Notes 0.1.1](https://github.com/N9ALV/IQ-quick-notes/releases/tag/quick-notes-v0.1.1)
+Current release: [IQ Wealth Quick Notes 0.1.2](https://github.com/N9ALV/IQ-quick-notes/releases/tag/quick-notes-v0.1.2)
 
 The Windows application and the agent Skill are separate downloads:
 
-- Application: `IQ-Wealth-Quick-Notes-0.1.1-win-x64.zip`
+- Application: `IQ-Wealth-Quick-Notes-0.1.2-win-x64.zip`
 - Agent instructions: `iq-wealth-quick-notes` Skill Markdown
 
 Do not use the Skill file as the application package. Do not install
@@ -91,8 +91,9 @@ pnpm run test:package:win
 ```
 
 The package test exercises the actual ZIP with system Node.js removed from
-`PATH`, a full Markdown path containing spaces, the friendly Windows opener,
-the file-association command, `/api/health`, and a clean server stop.
+`PATH`, complete Markdown paths containing spaces in two different folders,
+the exact-URL Windows opener, the file-association command, `/api/health`, and
+a clean server stop.
 
 ## Releases
 
