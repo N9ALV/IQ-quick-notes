@@ -1,139 +1,156 @@
 # IQ Wealth managed installation and updates
 
-## Client experience
+Clients need neither developer tools nor GitHub. The authority for client
+instructions and approved package links is the
+[canonical IU Quick Notes Skill](https://iu.com.au/iq/app/docs/kb/resources/iq-wealth-quick-notes/).
+Use the client's ordinary signed-in IU session; never invent an agent download
+token, entitlement or bypass. Skill Markdown and application ZIP are separate
+downloads. Never substitute `npm i -g roughdraft`.
 
-Clients do not need Git, GitHub, Node.js, npm or pnpm. IQ Wealth downloads an
-approved Windows release, verifies it, installs it under the client's local IQ
-Wealth application directory and keeps it updated.
+## Package and authenticity
 
-Do not run `npm i -g roughdraft`. That installs the public upstream package,
-not IQ Wealth Quick Notes.
-
-The application ZIP and the agent Skill are separate resources. The client
-download must be the ZIP named below, never the Skill instruction file. If the
-approved package is unavailable during maintenance, show a clear temporary
-unavailability message instead of substituting another download.
-
-## Release package
-
-The Windows package is named:
+Release 0.2.0 supports Windows x64 and includes Node.js 24.20.0. The ZIP is flat:
 
 ```text
-IQ-Wealth-Quick-Notes-<version>-win-x64.zip
-```
-
-The ZIP is flat. Extract it directly into the selected version directory:
-
-```text
+Install Quick Notes.cmd            Friendly installer
+Install-QuickNotes.ps1             Scriptable installer
+Rollback Quick Notes.cmd           Select retained verified version
+Rollback-QuickNotes.ps1
 app/                              Compiled app and production dependencies
-bin/Quick Notes.cmd               Friendly Windows Markdown opener
-bin/roughdraft.cmd                Agent compatibility command
-bin/Register Quick Notes.cmd      Safe per-user Open with registration
-bin/Remove Quick Notes.cmd        Removes only Quick Notes registration
-bin/Register-QuickNotesFileOpener.ps1
-runtime/node.exe                  Pinned Node.js runtime
+bin/Quick Notes.cmd               Friendly Windows opener
+bin/roughdraft.cmd                 Agent compatibility command
+bin/QuickNotes-Launch.ps1          Stable launch bridge
+bin/QuickNotes-Lifecycle.ps1       Validation and lifecycle helpers
+bin/Register Quick Notes.cmd      Optional Open with repair
+bin/Remove Quick Notes.cmd        Remove only Quick Notes registration
+runtime/node.exe                  Pinned runtime
 runtime/NODE-LICENSE.txt
-manifest.json                     Machine-readable package identity
+manifest.json                     Package identity
+integrity.json                    Per-file size and SHA-256 inventory
+NOTICE.md
+THIRD-PARTY-LICENCES.txt
 README.txt
 ```
 
-There is no extra package-name folder inside the ZIP.
+Verify the ZIP's **complete SHA-256 and byte count** against the current IU
+Skill before extracting or executing it. The inventory detects incomplete or
+altered files; it is not a digital signature and cannot establish publisher
+authenticity by itself. A checksum beside an untrusted ZIP is not approval.
 
-## Friendly Windows opener
+## Real installation procedure
 
-For a person or a Windows file association, invoke:
+1. Obtain the latest Skill from the permanent IU page, preserving the client's
+   configured preferences and approved note locations.
+2. Download its exact Windows ZIP and checksum through normal IU access.
+3. Verify both size and hash. On any mismatch, stop without running it.
+4. Extract to a download/temporary folder, outside the managed installation.
+5. Run the extracted **Install Quick Notes.cmd**, or invoke
+   `Install-QuickNotes.ps1` directly with PowerShell.
 
-```text
-bin\Quick Notes.cmd "C:\complete\path\to\note.md"
-```
-
-The launcher resolves the selected file to an absolute path before calling the
-internal CLI, asks for the complete document URL, passes that exact URL to
-Windows and returns rather than holding a console window open. This preserves
-the selected folder even when another note from a different folder is already
-open. The local server is intentionally stateless across project folders, so a
-safe cross-folder open does not require stopping it first.
-
-Run `bin\Register Quick Notes.cmd` once per user to add IQ Wealth Quick Notes
-to Windows' **Open with** list and Default Apps screen. The script does not
-replace the current `.md` default, edit Windows' protected `UserChoice`, or
-remove VS Code. Windows remains responsible for the user's final default-app
-choice. `bin\Remove Quick Notes.cmd` removes only Quick Notes' own registration.
-
-## Agent command
-
-Existing IQ Wealth workflows can continue to use the managed compatibility
-launcher:
-
-```text
-bin\roughdraft.cmd open "C:\complete\path\to\note.md" --json --no-watch
-```
-
-Use the finite, replayable monitoring pattern in
-[the agent guide](iq-wealth-agent-guide.md). Never point this launcher to a
-globally installed npm package.
-
-## Recommended installation layout
+The per-user installation needs no administrator rights:
 
 ```text
 %LOCALAPPDATA%\IQ Wealth\Quick Notes\
-  versions\
-    <version>\
-      app\
-      bin\
-      runtime\
-      manifest.json
-      README.txt
-  current.json
+  bin\                            Stable launchers and registration helpers
+  versions\<version>\             Immutable verified package
+  state\<version>\                Separate managed server state and port
+  staging\                        Isolated installation health checks
+  installation.json
+  current.json                    Active and previous verified versions
+  Rollback Quick Notes.cmd
 ```
 
-## Safe install and update procedure
+The installer validates all files, rejects linked/traversing/unlisted content,
+copies to a separate version, validates the copy and starts an isolated health
+check with the bundled runtime. It selects the new version only after success
+and does not stop an existing review session. Same-version reinstallation is
+allowed only when contents match; it will not overwrite a different package
+claiming the same version.
 
-1. Fetch the approved stable manifest over HTTPS.
-2. Compare it with the installed `manifest.json`.
-3. Download the exact ZIP and `.sha256` named by the manifest.
-4. Verify both byte count and complete SHA-256 before extraction.
-5. Extract directly to a new version directory; never overwrite the running
-   version.
-6. Validate `manifest.json`, `runtime\node.exe`, both launchers and the file
-   association helper.
-7. Run `bin\roughdraft.cmd --version`, start the app, and require
-   `GET /api/health` to return `status: "ok"`.
-8. Run the registration helper. It is safe to repeat and does not change the
-   user's existing Markdown default.
-9. Atomically replace `current.json` only after validation succeeds.
-10. Keep the previous approved version for rollback.
+It registers the **stable** friendly opener and creates Start menu entries for
+existing notes, new notes and canonical help. Registration never edits Windows'
+protected `UserChoice` or removes VS Code. Default selection remains the
+user's choice in Windows Default Apps.
 
-If any check fails, leave the installed version unchanged and report a simple
-maintenance error. Do not direct a client to npm or GitHub as a fallback.
+For test/special-purpose installation, `-InstallRoot <absolute-folder>`,
+`-NoRegistration` and `-NoShortcuts` are supported. Explain any deliberately
+omitted integration rather than claiming a complete client installation.
 
-## Local build and test
+## Stable commands and acceptance
 
-GitHub Actions must remain disabled. Build and test locally on Windows:
+```powershell
+$quickNotesRoot = Join-Path $env:LOCALAPPDATA 'IQ Wealth\Quick Notes'
+$quickNotes = Join-Path $quickNotesRoot 'bin\roughdraft.cmd'
+& $quickNotes --version
+& $quickNotes open 'C:\Client Notes\Review.md' --json --no-watch
+```
+
+Require the expected version, `opened: true`, correct full path, and returned
+browser URL. Check `/api/health` using that result's server URL. Open a second
+note from another folder; do not infer its location from the reusable server's
+original `/api/status.projectDir`.
+
+The friendly opener is `bin\Quick Notes.cmd "C:\full\path\note.md"`.
+Without a file it offers a Windows file picker; `--new` offers a save dialog.
+Keep stable launcher paths in the personalised Skill, not release-numbered
+paths or a global public Roughdraft command.
+
+## Updates, rollback and older installations
+
+Finish existing reviews and wait for Saved. Download and verify the newly
+approved package, then run its installer. Do not delete client notes or shared
+state manually.
+
+**Rollback Quick Notes.cmd** validates and health-checks the retained previous
+managed version before selecting it. It does not force-close existing sessions.
+No previous version, missing inventory, altered files or failed health means
+rollback stops without changing the active pointer.
+
+The installer recognises the earlier IQ-managed `current.json` layout only
+when it matches its own version directory and manifest. It retains old files
+and saves the exact old pointer as `legacy-current.json`. Older packages lack
+an inventory, so they are **not** trusted one-click rollback targets. Legacy
+recovery requires IQ Wealth to verify the original approved ZIP and deliberately
+restore the corresponding installation. A saved pointer alone is not approval.
+
+## Local build and verification
 
 ```powershell
 pnpm install --frozen-lockfile
 pnpm check
+$env:PLAYWRIGHT_BROWSER_CHANNEL = 'msedge' # Optional installed-browser fallback
+pnpm test:e2e --workers=4
 pnpm test:smoke
-pnpm run package:win
-pnpm run test:package:win
+pnpm audit
+pnpm test:package:lock
+pnpm package:win
+pnpm test:package:win
+pnpm test:install:win -- -PackagePath artifacts/IQ-Wealth-Quick-Notes-0.2.0-win-x64.zip
+pnpm test:install:win -- -PackagePath artifacts/IQ-Wealth-Quick-Notes-0.2.0-win-x64.zip -LegacyFixture
 ```
 
-The package test removes system Node.js from `PATH`, exercises the friendly
-opener with complete paths containing spaces in two different folders,
-validates the exact document URL and reads the second file through the packaged
-server, validates registration without changing the registry, calls
-`/api/health`, and stops the managed server.
+The lifecycle test uses actual native Windows files, CMD, PowerShell, bundled
+Node and HTTP. `-Fixture` augments an older ZIP for development; it must not
+be used as final release evidence.
 
-## Manual publishing
+## Manual publication and canonical documentation
 
-After local validation:
+GitHub Actions must remain disabled. Do not create a branch or PR.
 
-1. Confirm the ZIP hash in its `.sha256` file.
-2. Update [updates/stable.json](../updates/stable.json) with the exact version,
-   tag, asset URL, size and full SHA-256.
-3. Commit and push directly to `main`.
-4. Create the matching GitHub Release manually and attach the ZIP and checksum.
-5. Download the published asset once and verify its hash.
+1. Complete local checks and independent review; build the final ZIP.
+2. Set `updates/stable.json` to its exact identity, size and full hash.
+3. Commit and push source and maintainer docs directly to `main`.
+4. Publish the GitHub Release manually with ZIP and checksum.
+5. Download the release asset and verify the exact bytes.
+6. Follow the **current** Vault model: immutable binaries go to the private
+   `iu-vault-content` R2 bucket with matching `vault_assets` metadata; edit
+   the existing canonical Skill in `public.vault_documents`.
+7. Verify asset delivery and the canonical Skill revision. Never publish
+   proposed download links before their approved binary is available.
 
-Do not enable GitHub Actions, create a branch or open a pull request.
+Supabase is the live Markdown authority. GitHub content mirrors, WorkDrive,
+Contabo source folders and Baserow content tables are frozen migration/rollback
+sources, not routine authoring targets. Do not restart old reconciliation jobs,
+create companion Skill ZIPs/catalogues, or introduce another canonical article.
+These repository guides are maintainer/reference docs pointing to the single
+live client Skill, not a duplicate of its full content.

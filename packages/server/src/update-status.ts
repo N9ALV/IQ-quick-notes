@@ -151,7 +151,10 @@ export async function resolveUpdateStatus(
   const packageName =
     options.packageName?.trim() || installedPackageInfo.packageName;
   const currentVersion = installedPackageInfo.currentVersion;
-  if (packageName === MANAGED_PACKAGE_NAME) {
+  if (
+    packageName === MANAGED_PACKAGE_NAME ||
+    packageName === "iq-wealth-quick-notes"
+  ) {
     return {
       packageName,
       currentVersion,

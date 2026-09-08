@@ -2,12 +2,14 @@
   "schemaVersion": 1,
   "product": "IQ Wealth Quick Notes",
   "packageName": "iq-wealth-quick-notes-runtime",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "platform": "win32",
   "architecture": "x64",
-  "nodeVersion": "24.18.0",
+  "nodeVersion": "24.20.0",
   "command": "bin/Quick Notes.cmd",
   "agentCommand": "bin/roughdraft.cmd",
   "fileAssociationInstaller": "bin/Register Quick Notes.cmd",
-  "releaseTag": "quick-notes-v0.1.2"
+  "installer": "Install Quick Notes.cmd",
+  "integrityInventory": "integrity.json",
+  "releaseTag": "quick-notes-v0.2.0"
 }

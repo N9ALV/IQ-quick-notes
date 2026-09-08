@@ -3,3 +3,7 @@ packages:
 allowBuilds:
   esbuild: true
   msw: false
+overrides:
+  # Same-major security patches for versions pinned by Vite 6 and jsdom 29.
+  "postcss@<8.5.23": "8.5.28"
+  "undici@>=7.0.0 <7.29.0": "7.29.1"

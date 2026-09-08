@@ -11,17 +11,23 @@ interface StatusPayload {
 }
 
 export async function detectBackend(): Promise<StorageBackend> {
+  const sessionId = readSessionIdFromUrl();
   if (import.meta.env.VITE_PREVIEW_WEB === "1") {
+    if (sessionId) {
+      throw new Error("Remote sessions are unavailable in this preview.");
+    }
     return new LocalStorageBackend();
   }
 
-  const sessionId = readSessionIdFromUrl();
   const token = readTokenFromUrl();
 
   let statusPayload: StatusPayload | null = null;
 
   try {
-    const res = await fetch("/api/status");
+    const res = await fetch(
+      "/api/status",
+      token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+    );
     if (res.ok) {
       statusPayload = (await res.json()) as StatusPayload;
     }
@@ -29,16 +35,15 @@ export async function detectBackend(): Promise<StorageBackend> {
     // network error — no server available
   }
 
-  if (statusPayload) {
-    if (sessionId && statusPayload.capabilities?.remoteDocuments) {
-      try {
-        return await RemoteBackend.create(sessionId, token);
-      } catch (error) {
-        console.error("Could not initialize remote backend:", error);
-        throw error;
-      }
+  // An explicit shared session must never become an unrelated local workspace.
+  if (sessionId) {
+    if (!statusPayload?.capabilities?.remoteDocuments) {
+      throw new Error("Could not connect to the remote document service.");
     }
+    return RemoteBackend.create(sessionId, token);
+  }
 
+  if (statusPayload) {
     if (statusPayload.backend === "local-files") {
       return new ApiBackend({
         kind: "local-files",

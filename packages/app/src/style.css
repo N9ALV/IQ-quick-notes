@@ -80,6 +80,10 @@
     line-height: 1.58;
   }
 
+  .quick-notes-workspace .tiptap {
+    --editor-font-size: var(--reading-text-size, 18px);
+  }
+
   .tiptap p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
     color: rgb(148 163 184);

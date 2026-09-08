@@ -34,3 +34,11 @@ The mitigation is a shared bearer token, `ROUGHDRAFT_TOKEN`:
 - The viewerUrl printed by the CLI includes `?token=...` so the browser tab can authenticate. The frontend forwards the token as a header on fetches and as `?token=` on the EventSource.
 
 Loopback-only deployments stay back-compatible: no token required, no behavior change. The token is the contract that lets non-loopback deployments be safe; the secure-by-default startup guard is the contract that lets us ship the feature without expecting users to read documentation before exposing the endpoints.
+
+### Clarification (2026-09-08): Complete API and attachment boundary
+
+The local-file APIs can also read and rewrite files, so the shared token now protects every API request arriving from a non-loopback socket peer or naming a non-loopback Host. Forwarded headers cannot make a remote peer local. Ordinary loopback CLI requests remain token-free; remote-document endpoints retain their existing configured-token requirement. The query-token exception remains limited to remote-document GET event streams.
+
+API requests reject invalid Host headers and any supplied Origin that is null, malformed or different from the request's exact origin. The development proxy preserves the browser's Host rather than introducing a cross-origin exception. APIs use private, non-storing cache controls and disable content-type sniffing.
+
+Files served by `/api/files` are untrusted attachments, not application code. A response-level Content Security Policy sandboxes them without script or same-origin privileges. This prevents an HTML or SVG attachment from gaining access to the local-file APIs while preserving ordinary image and PDF viewing and the original file bytes.

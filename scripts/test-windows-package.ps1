@@ -113,6 +113,8 @@ $launcherPath = $null
 $originalPath = $env:PATH
 $originalStateDir = $env:ROUGHDRAFT_STATE_DIR
 $originalNoOpen = $env:ROUGHDRAFT_NO_OPEN
+$originalPort = $env:ROUGHDRAFT_PORT
+$originalStateFile = $env:ROUGHDRAFT_STATE_FILE
 
 try {
   New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
@@ -138,9 +140,13 @@ try {
   Assert-Condition -Condition ($manifest.nodeVersion -eq $packageConfig.nodeVersion) -Message "Bundled Node.js version does not match packaging/windows-package.json."
   Assert-Condition -Condition ($manifest.command -eq "bin/Quick Notes.cmd") -Message "The package's user command is not Quick Notes.cmd."
   Assert-Condition -Condition ($manifest.agentCommand -eq "bin/roughdraft.cmd") -Message "The package's agent compatibility command is missing."
-  $friendlyOpenerSource = Get-Content -Raw -LiteralPath $friendlyOpenerPath
-  Assert-Condition -Condition ($friendlyOpenerSource.Contains('--print-url --no-watch')) -Message "Quick Notes.cmd does not request the exact document URL for a normal Windows open."
-  Assert-Condition -Condition ($friendlyOpenerSource.Contains('start "" "%IQ_QUICK_NOTES_URL%"')) -Message "Quick Notes.cmd does not pass the exact document URL to Windows."
+  Assert-Condition -Condition ($manifest.installer -eq 'Install Quick Notes.cmd') -Message 'The package does not advertise its friendly installer.'
+  Assert-Condition -Condition (Test-Path -LiteralPath (Join-Path $packageRoot $manifest.installer) -PathType Leaf) -Message 'The friendly installer is missing.'
+  . (Join-Path $packageRoot 'bin/QuickNotes-Lifecycle.ps1')
+  $verifiedPackage = Test-QNPackage $packageRoot
+  Assert-Condition -Condition ($verifiedPackage.Manifest.version -eq $packageConfig.version) -Message 'The complete package inventory could not be verified.'
+  $thirdPartyNotices = Get-Content -Raw -LiteralPath (Join-Path $packageRoot 'THIRD-PARTY-LICENCES.txt')
+  Assert-Condition -Condition ($thirdPartyNotices.Contains('react') -and $thirdPartyNotices.Contains('express')) -Message 'The package is missing frontend or server dependency notices.'
 
   $registrationOutput = (& powershell -NoProfile -ExecutionPolicy Bypass -File $registrationScriptPath -ValidateOnly 2>&1 | Out-String).Trim()
   Assert-Condition -Condition ($LASTEXITCODE -eq 0) -Message "The file opener registration could not validate: $registrationOutput"
@@ -163,6 +169,8 @@ try {
 
   $env:PATH = "$env:SystemRoot\System32"
   $env:ROUGHDRAFT_STATE_DIR = $stateRoot
+  $env:ROUGHDRAFT_STATE_FILE = $null
+  $env:ROUGHDRAFT_PORT = [string](Get-QNFreePort)
   $env:ROUGHDRAFT_NO_OPEN = "1"
 
   Assert-Condition -Condition ($null -eq (Get-Command node -ErrorAction SilentlyContinue)) -Message "The test PATH unexpectedly exposes a system Node.js executable."
@@ -187,7 +195,7 @@ try {
   $serverStarted = $true
 
   $startHealthUrl = [Uri]::new([Uri]$startResult.url, "/api/health")
-  $startHealth = Invoke-RestMethod -UseBasicParsing -Uri $startHealthUrl
+  $startHealth = Invoke-RestMethod -UseBasicParsing -TimeoutSec 10 -Uri $startHealthUrl
   Assert-Condition -Condition ($startHealth.status -eq "ok") -Message "The detached server start did not reach the Quick Notes health endpoint."
 
   $initialStopOutput = (& $launcherPath stop --json 2>&1 | Out-String).Trim()
@@ -208,7 +216,7 @@ try {
   $serverStarted = $true
 
   $friendlyStatusUrl = [Uri]::new([Uri]$friendlyOpenResult.serverUrl, "/api/status")
-  $friendlyStatus = Invoke-RestMethod -UseBasicParsing -Uri $friendlyStatusUrl
+  $friendlyStatus = Invoke-RestMethod -UseBasicParsing -TimeoutSec 10 -Uri $friendlyStatusUrl
   Assert-Condition -Condition ($friendlyStatus.projectDir -eq [IO.Path]::GetFullPath($noteDirectory)) -Message "The first Quick Notes open did not start the managed server in the first note's folder."
   Write-SlogEvent -Event 'windows-package.first-note-opened' -Data @{
     fullPathPreserved = $friendlyOpenResult.path -eq [IO.Path]::GetFullPath($notePath)
@@ -237,7 +245,7 @@ try {
     [Uri]$secondFriendlyOpenResult.serverUrl,
     "/api/markdown-file?projectPath=$([Uri]::EscapeDataString($expectedSecondProjectDir))&path=$([Uri]::EscapeDataString([IO.Path]::GetFileName($secondNotePath)))"
   )
-  $secondFileResponse = Invoke-RestMethod -UseBasicParsing -Uri $secondFileApiUrl
+  $secondFileResponse = Invoke-RestMethod -UseBasicParsing -TimeoutSec 10 -Uri $secondFileApiUrl
   Assert-Condition -Condition ($secondFileResponse.content.Contains('second-folder acceptance test')) -Message "The reused stateless server could not read the note from the second folder."
   Write-SlogEvent -Event 'windows-package.cross-folder-opened' -Data @{
     sameServer = $friendlyOpenResult.serverUrl -eq $secondFriendlyOpenResult.serverUrl
@@ -253,12 +261,12 @@ try {
   Assert-Condition -Condition ($openResult.openMode -eq "disabled") -Message "The acceptance test unexpectedly launched a browser."
   $serverStarted = $true
 
-  $response = Invoke-WebRequest -UseBasicParsing -Uri $openResult.url
+  $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 -Uri $openResult.url
   Assert-Condition -Condition ($response.StatusCode -eq 200) -Message "The packaged app did not return HTTP 200."
   Assert-Condition -Condition ($response.Content.Contains('id="root"')) -Message "The packaged app shell is missing its root element."
 
   $healthUrl = [Uri]::new([Uri]$openResult.serverUrl, "/api/health")
-  $health = Invoke-RestMethod -UseBasicParsing -Uri $healthUrl
+  $health = Invoke-RestMethod -UseBasicParsing -TimeoutSec 10 -Uri $healthUrl
   Assert-Condition -Condition ($health.status -eq "ok") -Message "The packaged app health endpoint did not report ok."
   Assert-Condition -Condition ($health.product -eq "IQ Wealth Quick Notes") -Message "The packaged app health endpoint reported the wrong product."
 
@@ -299,6 +307,8 @@ finally {
   $env:PATH = $originalPath
   $env:ROUGHDRAFT_STATE_DIR = $originalStateDir
   $env:ROUGHDRAFT_NO_OPEN = $originalNoOpen
+  $env:ROUGHDRAFT_PORT = $originalPort
+  $env:ROUGHDRAFT_STATE_FILE = $originalStateFile
 
   if (Test-Path -LiteralPath $scratchRoot) {
     $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())

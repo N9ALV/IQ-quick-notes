@@ -1,12 +1,14 @@
 {
-  "name": "roughdraft",
-  "version": "0.1.9",
-  "description": "A local markdown review app",
+  "name": "iq-wealth-quick-notes",
+  "version": "0.2.0",
+  "private": true,
+  "packageManager": "pnpm@11.20.0",
+  "description": "IQ Wealth Quick Notes — local Markdown notes and agent review, based on Roughdraft",
   "license": "MIT",
   "author": "Nathan Baschez",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Lex-Inc/roughdraft.git"
+    "url": "git+https://github.com/N9ALV/IQ-quick-notes.git"
   },
   "bin": {
     "roughdraft": "./packages/server/bin/roughdraft.mjs"
@@ -28,6 +30,8 @@
     "test:coverage": "pnpm --filter @roughdraft/app exec vitest run --coverage && pnpm --filter @roughdraft/server exec vitest run --coverage",
     "package:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows.ps1",
     "test:package:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-package.ps1",
+    "test:package:lock": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-package-lock.ps1",
+    "test:install:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-install.ps1",
     "check": "pnpm lint && pnpm test:selectors && pnpm test && pnpm build",
     "build": "pnpm --filter @roughdraft/rfm build && pnpm --filter @roughdraft/app build && pnpm --filter @roughdraft/server build",
     "preview": "node packages/server/bin/roughdraft.mjs open README.md"
@@ -42,20 +46,15 @@
     "packages/server/defaults.d.mts"
   ],
   "dependencies": {
-    "@roughdraft/rfm": "file:packages/rfm",
-    "express": "^5.1.0"
+    "@roughdraft/rfm": "file:packages\\rfm",
+    "express": "^5.2.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.12",
-    "@playwright/test": "^1.59.1",
-    "@vitest/coverage-v8": "^4.1.5",
-    "knip": "^6.7.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.8.3"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
+    "@biomejs/biome": "^2.5.12",
+    "@playwright/test": "^1.63.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "knip": "^6.34.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
   }
 }

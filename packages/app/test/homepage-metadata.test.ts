@@ -2,71 +2,18 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const indexHtmlPath = resolve("index.html");
-const previewImageUrl = "https://roughdraft.md/sneak-peek.png";
-const pageTitle = "Roughdraft - Markdown reviews for coding agents";
-const pageDescription =
-  "A local-first Markdown review app for commenting, suggesting edits, and collaborating with your coding agent.";
-
-function readIndexDocument() {
-  return new DOMParser().parseFromString(
-    readFileSync(indexHtmlPath, "utf8"),
-    "text/html",
-  );
-}
-
-function metaContent(
-  document: Document,
-  selector: `meta[${string}]`,
-): string | null {
-  return document.querySelector(selector)?.getAttribute("content") ?? null;
-}
-
-describe("homepage metadata", () => {
-  it("uses the homepage screenshot for social previews", () => {
-    const document = readIndexDocument();
-
-    expect(document.querySelector("title")?.textContent).toBe(pageTitle);
-    expect(metaContent(document, 'meta[name="description"]')).toBe(
-      pageDescription,
+describe("Quick Notes document shell", () => {
+  it("identifies the installed app before JavaScript loads without advertising the upstream website", () => {
+    const document = new DOMParser().parseFromString(
+      readFileSync(resolve("index.html"), "utf8"),
+      "text/html",
     );
+    expect(document.title).toBe("IQ Wealth Quick Notes");
+    expect(document.documentElement.lang).toBe("en-AU");
     expect(
-      document.querySelector('link[rel="canonical"]')?.getAttribute("href"),
-    ).toBe("https://roughdraft.md/");
-
-    expect(metaContent(document, 'meta[property="og:title"]')).toBe(pageTitle);
-    expect(metaContent(document, 'meta[property="og:description"]')).toBe(
-      pageDescription,
-    );
-    expect(metaContent(document, 'meta[property="og:type"]')).toBe("website");
-    expect(metaContent(document, 'meta[property="og:url"]')).toBe(
-      "https://roughdraft.md/",
-    );
-    expect(metaContent(document, 'meta[property="og:image"]')).toBe(
-      previewImageUrl,
-    );
-    expect(metaContent(document, 'meta[property="og:image:alt"]')).toBe(
-      "Roughdraft markdown review workspace",
-    );
-    expect(metaContent(document, 'meta[property="og:image:width"]')).toBe(
-      "3456",
-    );
-    expect(metaContent(document, 'meta[property="og:image:height"]')).toBe(
-      "2234",
-    );
-
-    expect(metaContent(document, 'meta[name="twitter:card"]')).toBe(
-      "summary_large_image",
-    );
-    expect(metaContent(document, 'meta[name="twitter:title"]')).toBe(pageTitle);
-    expect(metaContent(document, 'meta[name="twitter:description"]')).toBe(
-      pageDescription,
-    );
-    expect(metaContent(document, 'meta[name="twitter:image"]')).toBe(
-      previewImageUrl,
-    );
-    expect(metaContent(document, 'meta[name="twitter:image:alt"]')).toBe(
-      "Roughdraft markdown review workspace",
-    );
+      document.querySelector('meta[name="robots"]')?.getAttribute("content"),
+    ).toContain("noindex");
+    expect(document.querySelector('link[rel="canonical"]')).toBeNull();
+    expect(document.querySelector('meta[property="og:image"]')).toBeNull();
   });
 });

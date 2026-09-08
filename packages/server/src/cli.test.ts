@@ -11,9 +11,58 @@ import {
   ensureServerRunning,
   getServerStateFilePath,
   runCli,
+  spawnWindowsDetachedProcess,
 } from "./cli";
 import { createApp } from "./index";
 import { ROUGHDRAFT_DEFAULT_PORT } from "./network";
+
+it.skipIf(process.platform !== "win32")(
+  "starts an independent Windows process with exact argv, cwd and inherited environment",
+  async () => {
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), "quick notes spawn "),
+    );
+    const output = path.join(directory, "result.json");
+    const argument = "A note & café's income \\";
+    const marker = process.env.ROUGHDRAFT_SPAWN_TEST;
+    process.env.ROUGHDRAFT_SPAWN_TEST = "ordinary inherited value";
+    let pid: number | undefined;
+    try {
+      const started = spawnWindowsDetachedProcess({
+        executable: process.execPath,
+        args: [
+          "-e",
+          'require("fs").writeFileSync(process.argv[1], JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),marker:process.env.ROUGHDRAFT_SPAWN_TEST}));setInterval(()=>{},1000)',
+          output,
+          argument,
+        ],
+        cwd: directory,
+      });
+      pid = started.pid;
+      expect(pid).toBeGreaterThan(0);
+      for (let attempt = 0; attempt < 50 && !fs.existsSync(output); attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      expect(JSON.parse(fs.readFileSync(output, "utf8"))).toEqual({
+        args: [argument],
+        cwd: directory,
+        marker: "ordinary inherited value",
+      });
+      expect(() => process.kill(started.pid, 0)).not.toThrow();
+    } finally {
+      if (pid) process.kill(pid);
+      if (marker === undefined) delete process.env.ROUGHDRAFT_SPAWN_TEST;
+      else process.env.ROUGHDRAFT_SPAWN_TEST = marker;
+      await fs.promises.rm(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
+    }
+  },
+  15000,
+);
 
 interface StartedServer {
   close: () => Promise<void>;

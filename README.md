@@ -12,11 +12,15 @@ compatibility with existing agent workflows.
 
 ## Approved Windows package
 
-Current release: [IQ Wealth Quick Notes 0.1.2](https://github.com/N9ALV/IQ-quick-notes/releases/tag/quick-notes-v0.1.2)
+Current release: [IQ Wealth Quick Notes 0.2.0](https://github.com/N9ALV/IQ-quick-notes/releases/tag/quick-notes-v0.2.0)
+
+Clients and their agents: use the [permanent IU Quick Notes page](https://iu.com.au/iq/app/docs/kb/resources/iq-wealth-quick-notes/)
+for current instructions and approved downloads. GitHub is the maintainer's
+source and release record, not a required client setup step.
 
 The Windows application and the agent Skill are separate downloads:
 
-- Application: `IQ-Wealth-Quick-Notes-0.1.2-win-x64.zip`
+- Application: `IQ-Wealth-Quick-Notes-0.2.0-win-x64.zip`
 - Agent instructions: `iq-wealth-quick-notes` Skill Markdown
 
 Do not use the Skill file as the application package. Do not install
@@ -33,11 +37,18 @@ GitHub, Node.js, npm or pnpm.
 
 The package includes:
 
+- `Install Quick Notes.cmd` — checks and installs the extracted package;
+- Start menu entries to open an existing note, create a note, or get help;
 - `Quick Notes.cmd` — friendly file opener for people and Windows;
 - `Register Quick Notes.cmd` — adds Quick Notes to **Open with** without
   changing the current Markdown default or removing VS Code;
 - `roughdraft.cmd` — managed compatibility command for agents;
 - the compiled app, local server and pinned runtime.
+
+Updates install beside the previous version and switch after a health check.
+Rollback supports a retained, verified managed version. The app also offers
+larger reading text, a clearly labelled practice note, and recovery of the
+latest draft through copy/download when saving is paused or fails.
 
 The application opens in a local browser page. The Markdown file remains on
 the client's computer.
@@ -88,12 +99,17 @@ Build and test the self-contained Windows package:
 ```powershell
 pnpm run package:win
 pnpm run test:package:win
+pnpm test:install:win -- -PackagePath artifacts/IQ-Wealth-Quick-Notes-0.2.0-win-x64.zip
 ```
 
 The package test exercises the actual ZIP with system Node.js removed from
 `PATH`, complete Markdown paths containing spaces in two different folders,
 the exact-URL Windows opener, the file-association command, `/api/health`, and
 a clean server stop.
+
+An installed Edge or Chrome can run local browser tests by setting
+`PLAYWRIGHT_BROWSER_CHANNEL` to `msedge` or `chrome`. The default remains
+Playwright's bundled Chromium. Clients do not need Playwright.
 
 ## Releases
 
@@ -106,6 +122,7 @@ Release procedure and rollback rules are in
 
 ## Licence and upstream attribution
 
-The source retains the upstream MIT licence and Roughdraft package lineage.
+The source retains the upstream declared MIT licence and Roughdraft lineage.
 IQ Wealth packaging, branding, managed-install guidance and Windows integration
-are maintained in this repository.
+are maintained in this repository. See [NOTICE.md](NOTICE.md); the Windows
+package includes runtime and production dependency licence notices.

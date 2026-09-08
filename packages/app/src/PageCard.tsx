@@ -636,6 +636,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
   const [hoveredCommentId, setHoveredCommentId] = useState<string | null>(null);
   const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null);
   const [hoveredChangeId, setHoveredChangeId] = useState<string | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [criticChanges, setCriticChanges] = useState<CriticChangeRailItem[]>(
     [],
   );
@@ -712,9 +713,20 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
       const currentEditor = editorRef.current;
       if (!currentEditor || files.length === 0) return;
 
-      const assets = await Promise.all(
-        files.map((file) => backend.saveAsset(file)),
-      );
+      setAttachmentError(null);
+      let assets: Awaited<ReturnType<StorageBackend["saveAsset"]>>[];
+      try {
+        assets = await Promise.all(
+          files.map((file) => backend.saveAsset(file)),
+        );
+      } catch (error) {
+        setAttachmentError(
+          error instanceof Error
+            ? error.message
+            : "The attachment was not added. Your note has not been changed.",
+        );
+        return;
+      }
       const markdown = assets
         .map((asset, index) => {
           const file = files[index];
@@ -1964,6 +1976,15 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
       onDrop={handleCardDrop}
       onPaste={handleCardPaste}
     >
+      {attachmentError ? (
+        <p
+          role="alert"
+          data-testid="attachment-error"
+          className="mx-auto my-4 max-w-3xl rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950"
+        >
+          {attachmentError}
+        </p>
+      ) : null}
       <div data-testid="document-page-shell" className={documentShellClass}>
         <div className={documentMainClass}>
           {activeComments.length > 0 ? (

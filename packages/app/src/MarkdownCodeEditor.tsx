@@ -41,7 +41,7 @@ export function createMarkdownCodeEditorExtensions(
         color: "inherit",
         fontFamily:
           'ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, "Liberation Mono", monospace',
-        fontSize: "0.95rem",
+        fontSize: "var(--reading-text-size, 0.95rem)",
       },
       ".cm-scroller": {
         fontFamily: "inherit",

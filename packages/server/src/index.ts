@@ -16,6 +16,7 @@ import {
   resolveBindHosts,
 } from "./network.js";
 import { ReviewEventQueue } from "./review-events.js";
+import { hasValidApiToken, requestSecurity } from "./request-security.js";
 import { resolveUpdateStatus } from "./update-status.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -422,26 +423,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   const remoteSessions = new Map<string, RemoteSession>();
 
   function isAuthorizedRemoteDocumentRequest(req: Request): boolean {
-    if (!remoteDocumentToken) return true;
-
-    const header =
-      typeof req.headers.authorization === "string"
-        ? req.headers.authorization
-        : "";
-    if (header.startsWith("Bearer ")) {
-      const supplied = header.slice("Bearer ".length).trim();
-      if (supplied === remoteDocumentToken) return true;
-    }
-
-    const acceptsQueryToken =
-      req.method === "GET" &&
-      req.path.startsWith("/api/remote-document/") &&
-      req.path.endsWith("/events");
-    const queryToken =
-      acceptsQueryToken && typeof req.query.token === "string"
-        ? req.query.token
-        : "";
-    return queryToken === remoteDocumentToken;
+    return !remoteDocumentToken || hasValidApiToken(req, remoteDocumentToken);
   }
 
   function rejectUnauthorizedRemoteDocumentRequest(res: Response): void {
@@ -464,6 +446,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   }, REMOTE_SESSION_SWEEP_INTERVAL_MS);
   remoteSessionSweeper.unref?.();
 
+  app.use("/api", requestSecurity(remoteDocumentToken));
   app.use(express.json({ limit: "50mb" }));
 
   function requestedProjectPath(req: Request): string | null {
@@ -600,7 +583,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     }
 
     res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Cache-Control", "private, no-store, no-transform");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
     res.write("retry: 1000\n\n");
@@ -706,7 +689,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
 
     res.status(200);
     res.type("json");
-    res.set("Cache-Control", "no-store");
+    res.set("Cache-Control", "private, no-store");
     res.flushHeaders?.();
 
     const result = await reviewEvents.wait({
@@ -732,7 +715,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       ? Math.max(0, requestedSequence)
       : 0;
 
-    res.set("Cache-Control", "no-store");
+    res.set("Cache-Control", "private, no-store");
     res.json(
       reviewEvents.eventsAfter({
         documentPath: target.absolutePath,
@@ -859,7 +842,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   });
 
   app.get("/api/health", (_req, res) => {
-    res.set("Cache-Control", "no-store");
+    res.set("Cache-Control", "private, no-store");
     res.json({
       status: "ok",
       product: "IQ Wealth Quick Notes",
@@ -886,7 +869,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     nextOpenRequestClientId += 1;
 
     res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Cache-Control", "private, no-store, no-transform");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
     res.write(
@@ -1081,7 +1064,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     const role = req.query.role === "viewer" ? "viewer" : "cli";
 
     res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Cache-Control", "private, no-store, no-transform");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
 
@@ -1254,6 +1237,12 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       return;
     }
 
+    // Attachments are untrusted documents, not application code. In particular,
+    // opening HTML or SVG must not give its scripts access to local-file APIs.
+    res.set(
+      "Content-Security-Policy",
+      "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; base-uri 'none'; form-action 'none'",
+    );
     res.sendFile(absolutePath, { dotfiles: "allow" });
   });
 
@@ -1316,8 +1305,8 @@ export async function createServer(
     throw new Error(
       [
         `Roughdraft refuses to bind ${bindHosts.join(", ")} without a token.`,
-        "Non-loopback bindings expose the remote-document endpoints, which can",
-        "rewrite files on every connected CLI machine. Set ROUGHDRAFT_TOKEN to",
+        "Non-loopback bindings expose local-file and remote-document APIs, which can",
+        "read or rewrite files on the server and connected CLI machines. Set ROUGHDRAFT_TOKEN to",
         "a strong secret and pass the same value to your CLI before retrying,",
         "or remove ROUGHDRAFT_BIND_HOST to keep loopback-only.",
       ].join(" "),

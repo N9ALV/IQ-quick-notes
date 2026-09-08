@@ -19,7 +19,11 @@ export default defineConfig(() => {
     },
     server: {
       proxy: {
-        "/api": `http://localhost:${apiPort}`,
+        "/api": {
+          target: `http://localhost:${apiPort}`,
+          // Preserve the browser's authority for the API's same-origin check.
+          changeOrigin: false,
+        },
       },
     },
   };

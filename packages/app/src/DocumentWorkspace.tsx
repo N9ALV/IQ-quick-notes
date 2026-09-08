@@ -4,6 +4,7 @@ import {
   CheckCheck,
   ChevronDown,
   CodeXml,
+  Download,
   Eye,
   Loader2,
   MessageSquarePlus,
@@ -11,7 +12,13 @@ import {
   RefreshCcw,
   Upload,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { DocumentEditorViewMode } from "./app-navigation";
 import { RemoteSessionBanner } from "./components/RemoteSessionBanner";
 import { Button } from "./components/ui/button";
@@ -72,7 +79,7 @@ const conflictNoticeCopy: Record<
 > = {
   changed: {
     title: "File changed on disk",
-    body: "Roughdraft found a newer version of this file on disk. Reload to use that version, or overwrite it with your current draft.",
+    body: "Quick Notes found a newer version of this file on disk. Reload to use that version, or overwrite it with your current draft.",
   },
   conflict: {
     title: "Save conflict",
@@ -239,6 +246,7 @@ export function isReviewHandoffDisabled({
 }
 
 interface DocumentWorkspaceProps {
+  isPractice?: boolean;
   documentPage: Page | null;
   activeDocumentPath: string | null;
   documentFilenameLabel: string;
@@ -260,6 +268,7 @@ interface DocumentWorkspaceProps {
 }
 
 export function DocumentWorkspace({
+  isPractice = false,
   documentPage,
   activeDocumentPath,
   documentFilenameLabel,
@@ -288,6 +297,41 @@ export function DocumentWorkspace({
   const [fileCopyMenuOpen, setFileCopyMenuOpen] = useState(false);
   const [copiedFileAction, setCopiedFileAction] =
     useState<FileCopyAction | null>(null);
+  const [fileActionError, setFileActionError] = useState<string | null>(null);
+  const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
+  const [readingSize, setReadingSize] = useState(() => {
+    try {
+      const stored = localStorage.getItem("iq-quick-notes-reading-size");
+      return stored === "large" || stored === "largest" ? stored : "standard";
+    } catch {
+      return "standard";
+    }
+  });
+  const copyFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftIdentity = `${activeDocumentPath ?? ""}:${documentPage?.id ?? ""}`;
+  const currentDraft = useRef({
+    identity: draftIdentity,
+    markdown: documentPage?.content ?? "",
+  });
+  if (currentDraft.current.identity !== draftIdentity) {
+    currentDraft.current = {
+      identity: draftIdentity,
+      markdown: documentPage?.content ?? "",
+    };
+  }
+  const handleLocalContentChange = useCallback(
+    (markdown: string) => {
+      currentDraft.current.markdown = markdown;
+      onDocumentLocalContentChange(markdown);
+    },
+    [onDocumentLocalContentChange],
+  );
+  useEffect(
+    () => () => {
+      if (copyFeedbackTimer.current) clearTimeout(copyFeedbackTimer.current);
+    },
+    [],
+  );
   const [overallComment, setOverallComment] = useState("");
   const sawNoWatcherAfterNotifiedRef = useRef(false);
   const saveControllerRef = useRef<DocumentSaveController | null>(null);
@@ -437,25 +481,73 @@ export function DocumentWorkspace({
       > = {
         path: activeDocumentPath ?? documentFilenameLabel,
         filename: documentFilenameLabel,
-        markdown: documentPage.content,
+        markdown: currentDraft.current.markdown,
       };
 
+      setFileActionError(null);
+      setCopiedFileAction(null);
       try {
         if (action === "rich-text") {
-          await writeRichTextToClipboard(documentPage.content);
+          await writeRichTextToClipboard(currentDraft.current.markdown);
         } else {
           await writePlainTextToClipboard(copyTextByAction[action]);
         }
 
         setCopiedFileAction(action);
-        window.setTimeout(() => setCopiedFileAction(null), 1400);
-        setFileCopyMenuOpen(false);
+        if (copyFeedbackTimer.current) clearTimeout(copyFeedbackTimer.current);
+        copyFeedbackTimer.current = setTimeout(
+          () => setCopiedFileAction(null),
+          2500,
+        );
       } catch (error) {
         console.error("Failed to copy document data:", error);
+        setFileActionError(
+          "Your browser could not copy this note. Choose Download a copy to keep your latest draft.",
+        );
       }
     },
     [activeDocumentPath, documentFilenameLabel, documentPage],
   );
+
+  const handleDownloadCopy = useCallback(() => {
+    if (!documentPage) return;
+    setFileActionError(null);
+    setDownloadMessage(null);
+    let url: string | null = null;
+    try {
+      const blob = new Blob([currentDraft.current.markdown], {
+        type: "text/markdown;charset=utf-8",
+      });
+      url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      const safeName = Array.from(
+        documentFilenameLabel.replace(/\.md$/i, ""),
+        (character) =>
+          character.charCodeAt(0) < 32 || /[<>:"/\\|?*]/.test(character)
+            ? "-"
+            : character,
+      ).join("");
+      anchor.download = `${safeName || "note"}-copy.md`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      setDownloadMessage(
+        "A download was requested for your current draft. Check your browser’s Downloads. Your original note has not been changed.",
+      );
+    } catch (error) {
+      console.error("Failed to download draft:", error);
+      setFileActionError(
+        "Your browser could not start the download. Keep this window open and try Copy markdown, or select and copy the note text.",
+      );
+    } finally {
+      if (url) {
+        const downloadUrl = url;
+        const revokeObjectURL = URL.revokeObjectURL.bind(URL);
+        setTimeout(() => revokeObjectURL(downloadUrl), 30_000);
+      }
+    }
+  }, [documentFilenameLabel, documentPage]);
 
   const editorViewModeToggleLabel =
     documentEditorViewMode === "rich-text"
@@ -508,10 +600,21 @@ export function DocumentWorkspace({
 
   return (
     <div
+      data-testid="document-workspace"
       className={cn(
-        "min-h-0 flex-1 overflow-y-auto px-8 pb-8 sm:px-12",
-        conflictNotice ? "pt-40 sm:pt-28" : "pt-10",
+        "quick-notes-workspace min-h-0 flex-1 overflow-y-auto px-4 pb-8 sm:px-12",
+        "pt-10",
       )}
+      style={
+        {
+          "--reading-text-size":
+            readingSize === "largest"
+              ? "24px"
+              : readingSize === "large"
+                ? "21px"
+                : "18px",
+        } as CSSProperties
+      }
     >
       <RemoteSessionBanner backend={backend} />
       <div
@@ -648,7 +751,7 @@ export function DocumentWorkspace({
           data-testid="file-conflict-notice"
           role="status"
           aria-label="File conflict"
-          className="fixed top-3 left-1/2 z-50 flex w-[min(calc(100vw-1rem),52rem)] -translate-x-1/2 flex-col gap-3 rounded-[8px] border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 px-3 py-3 text-amber-950 dark:text-amber-100 shadow-[0_14px_40px_rgba(120,53,15,0.18)] dark:shadow-[0_14px_40px_rgba(0,0,0,0.4)] sm:flex-row sm:items-center sm:justify-between sm:px-4"
+          className="sticky top-0 z-50 mx-auto mb-6 flex w-full max-w-4xl flex-col gap-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 px-4 py-4 text-amber-950 dark:text-amber-100 shadow-sm"
         >
           <div className="flex min-w-0 items-start gap-2.5">
             <AlertTriangle
@@ -721,7 +824,7 @@ export function DocumentWorkspace({
                       <button
                         type="button"
                         data-testid="document-editor-view-toggle"
-                        className="grid shrink-0 grid-cols-2 rounded-[999px] bg-[#E8E3DB] dark:bg-slate-700 px-[2px] pt-[3px] pb-[2px] shadow-[inset_0_1px_0_rgba(255,251,245,0.72)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                        className="grid h-10 shrink-0 grid-cols-2 items-center rounded-full bg-[#E8E3DB] dark:bg-slate-700 px-2 shadow-sm"
                       >
                         <span
                           className={`flex w-[1.375rem] items-center justify-center rounded-full py-[2px] transition ${
@@ -763,7 +866,7 @@ export function DocumentWorkspace({
                       <button
                         type="button"
                         data-testid="document-file-menu-trigger"
-                        className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-1 py-0.5 font-mono text-[0.7rem] tracking-[0.01em] text-stone-400 outline-none transition hover:bg-[#EEE9E1] hover:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300/70 dark:text-stone-500 dark:hover:bg-slate-800 dark:hover:text-stone-300 dark:focus-visible:ring-slate-600/70"
+                        className="inline-flex h-10 min-w-0 max-w-full items-center gap-1 rounded-full px-2 font-mono text-sm text-slate-700 outline-none transition hover:bg-[#EEE9E1] focus-visible:ring-2 focus-visible:ring-stone-300/70 dark:text-slate-200 dark:hover:bg-slate-800 dark:focus-visible:ring-slate-600/70"
                         title={documentFilenameLabel}
                         aria-label="Document file actions"
                       >
@@ -780,32 +883,138 @@ export function DocumentWorkspace({
                   <PopoverContent
                     aria-label="Document file actions"
                     data-testid="document-file-menu"
-                    className="w-44 p-1"
+                    className="w-72 max-w-[calc(100vw-2rem)] p-2"
                     align="start"
                   >
                     <div className="flex flex-col">
                       {fileCopyMenuOptions.map(({ action, label }) => (
-                        <button
+                        <Button
                           key={action}
                           type="button"
                           data-testid={`document-file-menu-${action}`}
-                          className="flex h-8 items-center justify-between rounded-md px-2 text-left text-[0.72rem] leading-none text-stone-700 outline-none transition hover:bg-[#EEE9E1] focus-visible:bg-[#EEE9E1] dark:text-stone-300 dark:hover:bg-slate-700 dark:focus-visible:bg-slate-700"
+                          variant="ghost"
+                          className="min-h-10 justify-between px-3 text-left text-base"
                           onClick={() => void handleCopyFileMenuAction(action)}
                         >
                           <span>{label}</span>
                           {copiedFileAction === action ? (
-                            <Check className="size-3 text-stone-500 dark:text-stone-400" />
+                            <span
+                              role="status"
+                              className="text-sm text-primary"
+                            >
+                              Copied
+                            </span>
                           ) : null}
-                        </button>
+                        </Button>
                       ))}
+                      <Button
+                        variant="ghost"
+                        data-testid="document-file-menu-download"
+                        className="min-h-10 justify-start px-3 text-base"
+                        onClick={handleDownloadCopy}
+                      >
+                        <Download aria-hidden="true" className="size-4" />
+                        Download a copy
+                      </Button>
+                      <p className="px-3 py-2 text-sm leading-relaxed text-muted-foreground">
+                        Copy and download include your latest edits, even if
+                        saving is paused.
+                      </p>
+                      {fileActionError ? (
+                        <p
+                          role="alert"
+                          data-testid="document-file-action-error"
+                          className="px-3 py-2 text-sm leading-relaxed text-red-700 dark:text-red-300"
+                        >
+                          {fileActionError}
+                        </p>
+                      ) : null}
+                      {downloadMessage ? (
+                        <p
+                          role="status"
+                          data-testid="document-download-status"
+                          className="px-3 py-2 text-sm leading-relaxed text-muted-foreground"
+                        >
+                          {downloadMessage}
+                        </p>
+                      ) : null}
                     </div>
                   </PopoverContent>
                 </Popover>
-                <DocumentSaveStatusIndicator
-                  saveState={saveState}
-                  diskChangeState={documentDiskChangeState}
-                />
-                <div className="ml-auto inline-flex h-[1.25rem] shrink-0 items-center">
+                {isPractice ? (
+                  <span
+                    className="text-sm text-amber-800"
+                    role="status"
+                    aria-label="Practice note, not saved"
+                    data-testid="practice-save-status"
+                  >
+                    Not saved — practice
+                  </span>
+                ) : (
+                  <DocumentSaveStatusIndicator
+                    saveState={saveState}
+                    diskChangeState={documentDiskChangeState}
+                  />
+                )}
+                <Select
+                  value={readingSize}
+                  onValueChange={(value) => {
+                    if (
+                      value !== "standard" &&
+                      value !== "large" &&
+                      value !== "largest"
+                    )
+                      return;
+                    setReadingSize(value);
+                    try {
+                      localStorage.setItem(
+                        "iq-quick-notes-reading-size",
+                        value,
+                      );
+                    } catch {
+                      /* Reading remains available if preferences cannot be stored. */
+                    }
+                  }}
+                >
+                  <SelectTrigger
+                    aria-label="Reading text size"
+                    data-testid="document-reading-size"
+                    className="h-10 min-w-32 px-2 text-sm text-slate-700 dark:text-slate-200"
+                  >
+                    <span>
+                      Text:{" "}
+                      {readingSize === "largest"
+                        ? "Largest"
+                        : readingSize === "large"
+                          ? "Large"
+                          : "Standard"}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      className="min-h-10 text-base"
+                      value="standard"
+                      data-testid="document-reading-size-standard"
+                    >
+                      Standard
+                    </SelectItem>
+                    <SelectItem
+                      className="min-h-10 text-base"
+                      value="large"
+                      data-testid="document-reading-size-large"
+                    >
+                      Large
+                    </SelectItem>
+                    <SelectItem
+                      className="min-h-10 text-base"
+                      value="largest"
+                      data-testid="document-reading-size-largest"
+                    >
+                      Largest
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="ml-auto inline-flex min-h-10 shrink-0 items-center">
                   <Select<DocumentInteractionMode>
                     value={documentInteractionMode}
                     onValueChange={(value) => {
@@ -815,7 +1024,7 @@ export function DocumentWorkspace({
                     <SelectTrigger
                       data-testid="document-mode-trigger"
                       aria-label="Document mode"
-                      className="h-[1.5rem] px-1 font-mono text-[0.7rem] leading-[1.25rem] font-normal tracking-[0.01em] text-stone-400 dark:text-stone-500 hover:text-stone-500 dark:hover:text-stone-400"
+                      className="h-10 px-2 font-mono text-sm font-normal text-slate-700 dark:text-slate-200"
                     >
                       <ActiveDocumentInteractionModeIcon className="size-[0.68rem]" />
                       <span className="truncate">
@@ -858,7 +1067,7 @@ export function DocumentWorkspace({
               backend={backend}
               onCommentRailPresenceChange={setDocumentHasComments}
               onDirtyStateChange={onDocumentDirtyStateChange}
-              onLocalContentChange={onDocumentLocalContentChange}
+              onLocalContentChange={handleLocalContentChange}
               onSaveControllerChange={(controller) => {
                 saveControllerRef.current = controller;
               }}

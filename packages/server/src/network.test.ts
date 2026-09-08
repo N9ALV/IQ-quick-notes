@@ -62,6 +62,19 @@ describe("isLoopbackHost", () => {
     expect(isLoopbackHost("100.73.51.106")).toBe(false);
     expect(isLoopbackHost("192.168.1.1")).toBe(false);
   });
+
+  it.each([
+    "127.attacker.example",
+    "127.0.0.999",
+    "127.0.0.1.attacker.example",
+  ])("does not classify %s as a loopback address", (host) => {
+    expect(isLoopbackHost(host)).toBe(false);
+  });
+
+  it("recognises IPv4-mapped loopback socket addresses", () => {
+    expect(isLoopbackHost("::ffff:127.0.0.1")).toBe(true);
+    expect(isLoopbackHost("::ffff:192.168.1.1")).toBe(false);
+  });
 });
 
 describe("hasNonLoopbackHost", () => {

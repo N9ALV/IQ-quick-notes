@@ -20,30 +20,35 @@ describe("compareVersions", () => {
 describe("resolveUpdateStatus", () => {
   const tempPaths: string[] = [];
 
-  it("never directs the managed IQ Wealth package to npm", async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "quick-notes-pkg-"));
-    const packageJsonPath = path.join(tempDir, "package.json");
-    tempPaths.push(tempDir);
-    fs.writeFileSync(
-      packageJsonPath,
-      JSON.stringify({
-        name: "iq-wealth-quick-notes-runtime",
-        version: "0.1.1",
-      }),
-    );
-    const fetchImpl = vi.fn<typeof fetch>();
+  it.each(["iq-wealth-quick-notes-runtime", "iq-wealth-quick-notes"])(
+    "never directs the managed %s package to npm",
+    async (packageName) => {
+      const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "quick-notes-pkg-"),
+      );
+      const packageJsonPath = path.join(tempDir, "package.json");
+      tempPaths.push(tempDir);
+      fs.writeFileSync(
+        packageJsonPath,
+        JSON.stringify({
+          name: packageName,
+          version: "0.1.1",
+        }),
+      );
+      const fetchImpl = vi.fn<typeof fetch>();
 
-    const status = await resolveUpdateStatus({ packageJsonPath, fetchImpl });
+      const status = await resolveUpdateStatus({ packageJsonPath, fetchImpl });
 
-    expect(fetchImpl).not.toHaveBeenCalled();
-    expect(status).toEqual({
-      packageName: "iq-wealth-quick-notes-runtime",
-      currentVersion: "0.1.1",
-      latestVersion: null,
-      updateAvailable: false,
-      updateCommand: "Managed by IQ Wealth",
-    });
-  });
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(status).toEqual({
+        packageName,
+        currentVersion: "0.1.1",
+        latestVersion: null,
+        updateAvailable: false,
+        updateCommand: "Managed by IQ Wealth",
+      });
+    },
+  );
 
   afterEach(() => {
     tempPaths.forEach((tempPath) => {

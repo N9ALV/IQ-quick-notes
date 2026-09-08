@@ -212,7 +212,7 @@ test.describe("stale writes", () => {
 
     const conflictNotice = fileConflictNotice(page);
     await expect(conflictNotice).toBeVisible();
-    await expect(conflictNotice).toHaveCSS("position", "fixed");
+    await expect(conflictNotice).toBeInViewport();
     await expect(conflictNotice).toContainText(
       "This file changed on disk while you have unsaved edits.",
     );
@@ -228,7 +228,7 @@ test.describe("stale writes", () => {
     ).toBeVisible();
   });
 
-  test("keeps conflict banner and save status stack from overlapping", async ({
+  test("keeps conflict banner and visible save status from overlapping", async ({
     page,
   }) => {
     await page.route("**/api/markdown-file/events**", (route) => route.abort());
@@ -252,7 +252,8 @@ test.describe("stale writes", () => {
       await appendInCodeEditor(page, `\nLocal body ${viewport.width}.\n`);
 
       const conflictNotice = fileConflictNotice(page);
-      const statusStack = page.getByTestId("document-status-stack");
+      // No review watcher is connected here, so the handoff stack is empty.
+      const statusStack = page.getByTestId("document-save-status");
       await expect(conflictNotice).toBeVisible();
       await expect(statusStack).toBeVisible();
 

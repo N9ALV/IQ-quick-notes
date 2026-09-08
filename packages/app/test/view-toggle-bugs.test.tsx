@@ -334,19 +334,20 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     ["saving", "Saving", "animate-spin"],
     ["unsaved", "Unsaved changes", "animate-spin"],
     ["error", "Save failed", ""],
-  ] satisfies Array<
-    [DocumentSaveState, string, string]
-  >)("shows icon-only %s save status", async (saveState, label, iconClass) => {
-    await renderSaveStatus({ saveState });
+  ] satisfies Array<[DocumentSaveState, string, string]>)(
+    "shows icon-only %s save status",
+    async (saveState, label, iconClass) => {
+      await renderSaveStatus({ saveState });
 
-    const status = getByTestId(container, "document-save-status");
-    expect(status.getAttribute("aria-label")).toBe(label);
-    expect(status.textContent).toBe("");
-    const icon = getByTestId(status, "document-save-status-icon");
-    if (iconClass) {
-      expect(icon.classList.contains(iconClass)).toBe(true);
-    }
-  });
+      const status = getByTestId(container, "document-save-status");
+      expect(status.getAttribute("aria-label")).toBe(label);
+      expect(status.textContent).toBe("");
+      const icon = getByTestId(status, "document-save-status-icon");
+      if (iconClass) {
+        expect(icon.classList.contains(iconClass)).toBe(true);
+      }
+    },
+  );
 
   it.each([
     ["changed", "File changed on disk"],
@@ -511,30 +512,33 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     ["saved", "conflict"],
   ] satisfies Array<
     [DocumentSaveState, "clean" | "changed" | "conflict" | "paused"]
-  >)("keeps handoff disabled for save state %s and disk state %s", (saveState, documentDiskChangeState) => {
-    expect(
-      isReviewHandoffDisabled({
-        saveState,
-        documentDiskChangeState,
-        reviewHandoffState: "idle",
-      }),
-    ).toBe(true);
-  });
+  >)(
+    "keeps handoff disabled for save state %s and disk state %s",
+    (saveState, documentDiskChangeState) => {
+      expect(
+        isReviewHandoffDisabled({
+          saveState,
+          documentDiskChangeState,
+          reviewHandoffState: "idle",
+        }),
+      ).toBe(true);
+    },
+  );
 
-  it.each([
-    "saving",
-    "unsaved",
-  ] satisfies DocumentSaveState[])("keeps handoff enabled while a debounced save is pending (save state %s)", (saveState) => {
-    // The button must not dim on every keystroke while autosave debounces; it
-    // stays enabled and flushes the pending save on click instead.
-    expect(
-      isReviewHandoffDisabled({
-        saveState,
-        documentDiskChangeState: "clean",
-        reviewHandoffState: "idle",
-      }),
-    ).toBe(false);
-  });
+  it.each(["saving", "unsaved"] satisfies DocumentSaveState[])(
+    "keeps handoff enabled while a debounced save is pending (save state %s)",
+    (saveState) => {
+      // The button must not dim on every keystroke while autosave debounces; it
+      // stays enabled and flushes the pending save on click instead.
+      expect(
+        isReviewHandoffDisabled({
+          saveState,
+          documentDiskChangeState: "clean",
+          reviewHandoffState: "idle",
+        }),
+      ).toBe(false);
+    },
+  );
 
   it("allows handoff when saved, conflict-free, and idle", () => {
     expect(

@@ -1,5 +1,5 @@
-# Roughdraft UI State Screenshot Guide
-This file is a reusable checklist for capturing Roughdraft's major UI states. It is meant to support periodic visual review, not to replace automated tests.
+# IQ Wealth Quick Notes UI State Screenshot Guide
+This file is a reusable checklist for capturing Quick Notes’ major UI states. It is meant to support periodic visual review, not to replace automated tests.
 ## Screenshot Folder Convention
 Put each run in a timestamped directory:
 
@@ -12,8 +12,8 @@ Use filenames that sort by product area, viewport, and state:
 ```text
 01-home-desktop.png
 01-home-mobile.png
-02-home-install-dialog.png
-03-home-workflow-stage-1.png
+02-practice-mobile-largest.png
+03-practice-mobile-code-largest.png
 04-preview-rich-review-rail.png
 ```
 ## Starting The App
@@ -95,16 +95,14 @@ suggestions:
 ## Capture Matrix
 | Area | State | How to reach it | Useful selectors | Notes |
 | --- | --- | --- | --- | --- |
-| App shell | Initial loading | Load any route and capture before backend initialization completes, usually with a route/mock delay | none | Transient; easiest in a mocked route or component harness. |
-| Homepage | Desktop | `/` at desktop viewport | `homepage-workflow-storyboard` | Capture first viewport and a lower scroll position where the storyboard is active. |
-| Homepage | Mobile | `/` at mobile viewport | `homepage-workflow-storyboard`, `homepage-workflow-scene-list` | Sticky visual is hidden until the workflow heading has scrolled past. |
-| Homepage | Install dialog | Click the install CTA | Base UI dialog content | Include the IQ Wealth-managed setup prompt, its warning not to use npm, and the close affordance. |
-| Homepage | Workflow stage 1 | Scroll storyboard to first scene | `homepage-workflow-terminal`, `homepage-workflow-scene` | User request visible; agent work and popup are hidden. |
-| Homepage | Workflow stage 2 | Scroll to second scene | `homepage-workflow-agent-work` | Agent work becomes visible. |
-| Homepage | Workflow stage 3 | Scroll to third scene | `homepage-workflow-terminal-command`, `homepage-workflow-popup` | Roughdraft command and document popup are visible. |
-| Homepage | Workflow stage 4 | Scroll to fourth scene | `homepage-workflow-review-rail`, `homepage-workflow-comment-highlight` | User feedback appears in the document/review rail. |
-| Homepage | Workflow stage 5 | Scroll to fifth scene | `homepage-workflow-handoff-button` | Done handoff button is visible. |
-| Homepage | Workflow stage 6 | Scroll to final scene | `homepage-workflow-agent-resume` | Agent resume line and incorporated plan are visible; done button is hidden. |
+| App shell | Initial loading | Delay the backend status request | `role=status` | Opening message and help link remain visible. |
+| Homepage | Desktop | `/` at desktop viewport | `homepage`, `homepage-heading` | IQ Wealth Quick Notes, practice action, canonical help and simple file instructions. |
+| Homepage | Mobile and 200% | `/` at 390px; desktop with 200% zoom | `homepage` | Actions wrap without horizontal scrolling. |
+| Homepage | Open failed | Request a missing .md file | `role=alert`, Try again | Error, retry and help visible; no coding-agent installation prompt. |
+| Practice | Persistent warning | Replace the entire sample note at `/preview` | `role=status` | Warning outside the editor still says it is not saved to the computer; no Saved indicator. |
+| Document | Reading size | Choose Largest from Reading text size | labelled combobox | Verify 24px body text in rich and code views, narrow viewport and preference after reload. No note content changes. |
+| Document | Recovery actions | Open Document file actions; copy or download | `document-file-menu` | Current draft, visible Copied feedback, download-request message that does not claim the original note was saved. |
+| Document | Clipboard blocked | Deny the browser clipboard operation | `role=alert` | Visible error and Download a copy alternative; no false Copied message. |
 | Homepage | Update notice | Start app with backend status returning `updateStatus` | update notice component | Best captured with API mocking unless an update is actually available. |
 | RFM guide | Default page | `/roughdraft-flavored-markdown` | `rfm-source-editor` | Capture the source editor plus rendered output. |
 | RFM guide | Plan review example | Click `rfm-format-example-plan-review` | `rfm-format-example-plan-review` | Default example if already selected. |
@@ -131,6 +129,8 @@ suggestions:
 | Document | Review handoff error | Force handoff API error | `review-handoff-status` | Popover title: `Could not notify agent`. |
 | Remote | Connected banner | Open with `?session=<id>&token=<token>` and remote capability enabled | `role=status`, `aria-label="Remote session connected"` | Requires remote backend support in `/api/status`. |
 | Remote | Disconnected banner | Drop remote session connection | `role=alert`, `aria-label="Remote session disconnected"` | Best captured with backend mocking. |
+| Remote | Initial connection failed | Refuse `/api/status`, disconnect discovery, or omit remote capability for a session URL | `role=alert`, `remote-session-retry` | Clear remote-only error and retry; no local welcome/practice controls. Retry recovers the same session when available. |
+| Practice | Attachment not added | Paste or drop an SVG, HTML or unsupported attachment at `/preview` | `attachment-error` | Visible format explanation; existing draft unchanged. PNG, JPEG, GIF, WebP, AVIF, BMP and PDF remain accepted. |
 | Editor | Selection menu | Select text in rich editor | `selection-menu` | Capture formatting buttons and comment/suggestion actions. |
 | Editor | Selection menu on suggestion | Select existing suggestion text | `selection-menu-action-accept-suggestion`, `selection-menu-action-reject-suggestion` | Requires review fixture. |
 | Editor | Link popover | Click a link or choose Link from selection menu | `link-popover`, `link-url-input`, `link-action-open`, `link-action-delete` | Use the plain fixture link. |
@@ -142,7 +142,7 @@ suggestions:
 | Comment editor | Reply editing | Use a reply action | `comment-rail-child-editor` | Useful for nested thread spacing. |
 | Code mode | Review rail present | Open review fixture with `?editor=code` | `page-card-code`, `markdown-code-editor` | Confirms code editor and rail can coexist. |
 | Code mode | Review rail absent | Open fenced fixture with `?editor=code` | `page-card-code`, `markdown-code-editor` | Confirms fenced CriticMarkup alone does not create review rail. |
-| Error/home fallback | Non-Markdown path | Open URL with `?path=/tmp/file.txt` | homepage error message | Copy: `Roughdraft now opens one .md file at a time.` |
+| Error/home fallback | Non-Markdown path | Open URL with `?path=/tmp/file.txt` | homepage error message | Explains that Quick Notes opens one Markdown (.md) note at a time, with retry/help. |
 | Error/home fallback | Missing/unloadable path | Open URL with invalid markdown path through local backend | homepage error message | Captures load-error homepage variant. |
 ## Playwright Capture Skeleton
 ```ts
@@ -163,7 +163,7 @@ await mobile.screenshot({ path: `${outDir}/01-home-mobile.png`, fullPage: true }
 await browser.close();
 ```
 
-For interaction-heavy states, prefer selectors over coordinates. The current code has stable `data-testid` hooks for the homepage storyboard, editor view toggle, mode trigger, conflict banner/actions, review rail, rich editor, code editor, selection menu, link popover, and context menu.
+For interaction-heavy states, prefer selectors over coordinates. The current code has stable `data-testid` hooks for the welcome page, editor view toggle, mode trigger, conflict banner/actions, review rail, rich editor, code editor, selection menu, link popover, and context menu.
 ## States That Need A Harness Or Mocking
 These are real product states, but they are awkward to capture deterministically through only public routes:
 

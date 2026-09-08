@@ -796,11 +796,95 @@ async function defaultStopProcess(pid: number): Promise<void> {
   }
 }
 
+export function spawnWindowsDetachedProcess(options: {
+  executable: string;
+  args: string[];
+  cwd: string;
+}): SpawnedServer {
+  // ShellExecute starts without inheriting the caller's captured pipe handles.
+  // Plain CreateProcess can leak extra ancestor handles even with stdio=ignore.
+  // Encode data separately: no filename or argument is PowerShell source text.
+  const quotedArgs = options.args.map(
+    (argument) =>
+      `"${argument.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, "$1$1")}"`,
+  );
+  const payload = Buffer.from(
+    JSON.stringify({
+      executable: options.executable,
+      arguments: quotedArgs.join(" "),
+      cwd: options.cwd,
+    }),
+    "utf8",
+  ).toString("base64");
+  const script = `
+$ErrorActionPreference = 'Stop'
+$options = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${payload}')) | ConvertFrom-Json
+$start = [Diagnostics.ProcessStartInfo]::new()
+$start.FileName = $options.executable
+$start.Arguments = $options.arguments
+$start.WorkingDirectory = $options.cwd
+$start.UseShellExecute = $true
+$start.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+$child = [Diagnostics.Process]::Start($start)
+if ($null -eq $child) { throw 'The Quick Notes server process did not start.' }
+[Console]::Out.WriteLine($child.Id)
+$child.Dispose()
+`;
+  const powershell = path.join(
+    process.env.SystemRoot || "C:\\Windows",
+    "System32",
+    "WindowsPowerShell",
+    "v1.0",
+    "powershell.exe",
+  );
+  const result = spawnSync(
+    powershell,
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-EncodedCommand",
+      Buffer.from(script, "utf16le").toString("base64"),
+    ],
+    {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 15000,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  const pidText = result.stdout?.trim() ?? "";
+  const pid = Number(pidText);
+  if (
+    result.error ||
+    result.status !== 0 ||
+    !/^[1-9][0-9]*$/.test(pidText) ||
+    !Number.isSafeInteger(pid)
+  ) {
+    throw new Error(
+      `Failed to start Quick Notes in the background: ${result.error?.message || result.stderr?.trim() || "invalid process response"}`,
+    );
+  }
+  return { pid };
+}
+
 function defaultSpawnServerProcess(options: {
   port: number;
   projectDir: string;
 }): SpawnedServer {
   const serverEntryPath = fileURLToPath(new URL("./child.js", import.meta.url));
+  if (process.platform === "win32") {
+    return spawnWindowsDetachedProcess({
+      executable: process.execPath,
+      args: [
+        serverEntryPath,
+        "--port",
+        String(options.port),
+        "--project-dir",
+        options.projectDir,
+      ],
+      cwd: options.projectDir,
+    });
+  }
   const child = spawn(
     process.execPath,
     [

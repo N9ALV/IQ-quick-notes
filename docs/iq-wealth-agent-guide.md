@@ -2,6 +2,11 @@
 
 ## Use the managed installation
 
+First obtain the current instructions and separately labelled Windows package
+from the [permanent IU Quick Notes page](https://iu.com.au/iq/app/docs/kb/resources/iq-wealth-quick-notes/).
+Use ordinary IU member sign-in. Clients and their agents do not need GitHub.
+The page's **Download page** action retrieves the Skill, not the application.
+
 IQ Wealth installs and updates Quick Notes for the client. Never install or
 update it with npm, pnpm, Git or a public Roughdraft installer.
 
@@ -13,6 +18,17 @@ The package deliberately has two launchers:
 
 If the managed command is unavailable, report that Quick Notes needs IQ Wealth
 maintenance. Do not substitute the public `roughdraft` npm package.
+
+Version 0.2.0 supplies an actual installer: after checking the approved ZIP's
+size and complete hash, extract it outside the installation and run
+`Install Quick Notes.cmd`. Do not construct `current.json` by hand. See the
+[managed installation guide](iq-wealth-managed-installation.md) for precise
+installation, update, legacy recovery and test commands.
+
+Use the stable installed launcher, normally
+`%LOCALAPPDATA%\IQ Wealth\Quick Notes\bin\roughdraft.cmd`. Resolve its full
+path explicitly; the bare commands below are shorthand, not permission to use
+whatever public `roughdraft` happens to be on PATH.
 
 ## Reliable open and handoff pattern
 
@@ -73,6 +89,11 @@ page or handing the note back.
 
 After a handoff, always read the Markdown file from disk. That file, including
 checked tasks, text edits, comments and suggestions, is the source of truth.
+
+The welcome page's practice note is temporary and must not be used as proof of
+disk saving or a completed client handoff. Reading-size preferences change
+display only. Copy/download now recover the current draft, including unsaved
+edits; a downloaded copy does not mean the original note was saved or repaired.
 
 ## Download identity
 

@@ -3,6 +3,16 @@ import { defineConfig, devices } from "@playwright/test";
 const appPort = Number(process.env.PLAYWRIGHT_APP_PORT ?? 4318);
 const apiPort = Number(process.env.API_PORT ?? 4317);
 const appUrl = `http://127.0.0.1:${appPort}`;
+const requestedBrowserChannel = process.env.PLAYWRIGHT_BROWSER_CHANNEL;
+if (
+  requestedBrowserChannel &&
+  requestedBrowserChannel !== "chrome" &&
+  requestedBrowserChannel !== "msedge"
+) {
+  throw new Error(
+    "PLAYWRIGHT_BROWSER_CHANNEL must be chrome or msedge when supplied.",
+  );
+}
 const webServerEnv = Object.fromEntries(
   Object.entries(process.env).filter(([, value]) => value !== undefined),
 ) as Record<string, string>;
@@ -22,7 +32,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], channel: requestedBrowserChannel },
     },
   ],
   webServer: [

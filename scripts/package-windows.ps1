@@ -42,6 +42,33 @@ function Assert-SafeChildPath {
   }
 }
 
+function Invoke-LockedRuntimeDeployment {
+  param([string]$Workspace, [string]$Target)
+
+  if (-not (Test-Path -LiteralPath (Join-Path $Workspace "pnpm-lock.yaml") -PathType Leaf)) {
+    throw "The reviewed dependency lockfile is missing. Runtime deployment will not resolve replacement versions."
+  }
+  Push-Location $Workspace
+  try {
+    Invoke-CheckedCommand -FilePath "pnpm" -ArgumentList @(
+      "--config.node-linker=hoisted",
+      # Legacy hoisted deploy explicitly disables lockfile reading in pnpm 11.
+      # Shared-lockfile deployment derives a production lock and performs a
+      # frozen install. These flags affect only the temporary workspace.
+      "--config.shared-workspace-lockfile=true",
+      "--config.lockfile=true",
+      "--config.inject-workspace-packages=true",
+      "--config.force-legacy-deploy=false",
+      "--filter",
+      "iq-wealth-quick-notes",
+      "deploy",
+      "--prod",
+      $Target
+    )
+  }
+  finally { Pop-Location }
+}
+
 function Write-Utf8File {
   param(
     [Parameter(Mandatory = $true)]
@@ -144,21 +171,7 @@ try {
   Copy-Item -LiteralPath (Join-Path $repoRoot "packages\server\defaults.mjs") -Destination (Join-Path $workspacePackagesRoot "server\defaults.mjs")
   Copy-Item -LiteralPath (Join-Path $repoRoot "packages\server\defaults.d.mts") -Destination (Join-Path $workspacePackagesRoot "server\defaults.d.mts")
 
-  Push-Location $deploymentWorkspace
-  try {
-    Invoke-CheckedCommand -FilePath "pnpm" -ArgumentList @(
-      "--config.node-linker=hoisted",
-      "--filter",
-      "roughdraft",
-      "deploy",
-      "--prod",
-      "--legacy",
-      $appRoot
-    )
-  }
-  finally {
-    Pop-Location
-  }
+  Invoke-LockedRuntimeDeployment -Workspace $deploymentWorkspace -Target $appRoot
 
   $deployedPackagePath = Join-Path $appRoot "package.json"
   $deployedPackage = Get-Content -Raw -LiteralPath $deployedPackagePath | ConvertFrom-Json
@@ -232,6 +245,8 @@ try {
   Copy-Item -LiteralPath (Join-Path $expandedNodeRoot "LICENSE") -Destination (Join-Path $runtimeRoot "NODE-LICENSE.txt")
 
   Copy-Item -Path (Join-Path $repoRoot "packaging\windows\*") -Destination $binRoot
+  Copy-Item -Path (Join-Path $repoRoot "packaging\installer\*") -Destination $packageRoot
+  Copy-Item -LiteralPath (Join-Path $repoRoot "NOTICE.md") -Destination (Join-Path $packageRoot "NOTICE.md")
 
   $releaseManifest = [ordered]@{
     schemaVersion = $packageConfig.schemaVersion
@@ -244,6 +259,8 @@ try {
     command = $packageConfig.command
     agentCommand = $packageConfig.agentCommand
     fileAssociationInstaller = $packageConfig.fileAssociationInstaller
+    installer = $packageConfig.installer
+    integrityInventory = $packageConfig.integrityInventory
     releaseTag = $packageConfig.releaseTag
   }
   Write-Utf8File -Path (Join-Path $packageRoot "manifest.json") -Content (($releaseManifest | ConvertTo-Json -Depth 20) + "`n")
@@ -251,26 +268,102 @@ try {
   $packageReadme = @"
 IQ Wealth Quick Notes $($packageConfig.version)
 
-This is an IQ Wealth-managed runtime package. Clients do not need Node.js,
-Git, npm or pnpm.
+This is the approved Windows application package, not the Skill instructions.
+You do not need Node.js, Git, npm, pnpm or administrator rights.
+
+1. Obtain this ZIP and its SHA-256 from the approved IU Quick Notes page.
+2. Check the ZIP's SHA-256, then use Windows' Extract All.
+3. Open Install Quick Notes.cmd in the extracted folder.
+4. Open IQ Wealth Quick Notes from the Start menu and choose a Markdown file.
+
+The installer checks every packaged file before running the bundled app,
+installs a separate version and retains the previous files. Automatic rollback
+requires a retained version with a verified inventory (0.2.0 or later).
+The file inventory checks integrity; the independently obtained ZIP hash and
+approved download source are what establish authenticity.
+
+Installation location:
+
+  %LOCALAPPDATA%\IQ Wealth\Quick Notes
+
+Your notes and existing Markdown default (including VS Code) are not changed.
+Quick Notes is added to the Open with list. You may choose it as the default
+through Windows Default Apps, but this is optional.
+
+For an update, close or finish reviewing your existing notes, download the
+approved new package and run its installer. Existing open sessions are not
+forcibly closed. Rollback Quick Notes.cmd selects a verified previous version.
+Pre-0.2.0 files and their old pointer are retained for IQ Wealth-assisted
+recovery, but cannot be selected by automatic rollback without verification.
 
 People can open a Markdown file with:
 
   bin\Quick Notes.cmd "C:\path\to\note.md"
 
-IQ Wealth agents should invoke:
+IQ Wealth agents should invoke the stable installed compatibility launcher:
 
-  bin\roughdraft.cmd open "C:\path\to\note.md" --json --no-watch
+  "%LOCALAPPDATA%\IQ Wealth\Quick Notes\bin\roughdraft.cmd" open "C:\path\to\note.md" --json --no-watch
 
 To add Quick Notes to Windows' Open with list without changing the current
 Markdown default, run:
 
   bin\Register Quick Notes.cmd
 
-Do not install roughdraft from npm. Updates are supplied as approved,
-version-pinned IQ Wealth Quick Notes packages.
+Do not install roughdraft from npm. This application is based on Roughdraft;
+upstream attribution is retained in NOTICE.md. Help, current instructions and
+approved downloads: https://iu.com.au/iq/app/docs/kb/resources/iq-wealth-quick-notes/
 "@
   Write-Utf8File -Path (Join-Path $packageRoot "README.txt") -Content ($packageReadme.Trim() + "`r`n")
+
+  # Include the actual notices for production packages incorporated into the
+  # frontend, as well as the server dependencies retained in node_modules.
+  Push-Location $repoRoot
+  try {
+    $licenceOutput = & pnpm licenses list --prod --json
+    if ($LASTEXITCODE -ne 0) { throw "Could not collect production dependency licences." }
+    $licenceGroups = ($licenceOutput -join "`n") | ConvertFrom-Json
+  }
+  finally { Pop-Location }
+  $licenceText = [Text.StringBuilder]::new()
+  [void]$licenceText.AppendLine("IQ Wealth Quick Notes - third-party licences")
+  [void]$licenceText.AppendLine("Generated from the verified lockfile's production dependency graph.")
+  foreach ($group in $licenceGroups.PSObject.Properties | Sort-Object Name) {
+    foreach ($dependency in $group.Value | Sort-Object name) {
+      [void]$licenceText.AppendLine("`n========================================")
+      [void]$licenceText.AppendLine("$($dependency.name) $($dependency.versions -join ', ')")
+      [void]$licenceText.AppendLine("Declared licence: $($group.Name)")
+      foreach ($dependencyPath in $dependency.paths) {
+        $noticeFiles = @(Get-ChildItem -LiteralPath $dependencyPath -File | Where-Object {
+          $_.Name -match '^(licen[sc]e|copying|copyright|notice|ofl|unlicense)(\..+)?$'
+        } | Sort-Object Name)
+        foreach ($noticeFile in $noticeFiles) {
+          [void]$licenceText.AppendLine("`n--- $($noticeFile.Name) ---")
+          [void]$licenceText.AppendLine([IO.File]::ReadAllText($noticeFile.FullName))
+        }
+        if ($noticeFiles.Count -eq 0) {
+          [void]$licenceText.AppendLine("No separate licence file supplied; see the package metadata and upstream project.")
+        }
+      }
+    }
+  }
+  Write-Utf8File -Path (Join-Path $packageRoot "THIRD-PARTY-LICENCES.txt") -Content $licenceText.ToString()
+
+  # The inventory is generated last and deliberately excludes itself. It is an
+  # integrity check, not a signature: clients also verify the approved ZIP hash.
+  $inventoryFiles = @(
+    Get-ChildItem -LiteralPath $packageRoot -Recurse -File | Sort-Object FullName | ForEach-Object {
+      if (($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "The package cannot contain a reparse point: $($_.FullName)"
+      }
+      [ordered]@{
+        path = $_.FullName.Substring($packageRoot.Length + 1).Replace('\', '/')
+        size = $_.Length
+        sha256 = Get-Sha256 -Path $_.FullName
+      }
+    }
+  )
+  $inventory = [ordered]@{ schemaVersion = 1; files = $inventoryFiles }
+  Write-Utf8File -Path (Join-Path $packageRoot "integrity.json") -Content (($inventory | ConvertTo-Json -Depth 5) + "`n")
 
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   foreach ($outputPath in @($artifactPath, $checksumPath)) {

@@ -1,61 +1,62 @@
 # Quick Notes: simple Windows guide
 
-## What it is
+Quick Notes opens an ordinary Markdown note in your browser. Your note stays
+on your computer and can still be opened in VS Code or another Markdown editor.
 
-IQ Wealth Quick Notes opens a normal Markdown note in a local browser page. The
-note stays on your computer and can still be opened in VS Code or another
-Markdown editor.
+## Install or update
 
-## Installing it
+IQ Wealth normally handles this for you. Ask it to read the
+[current Quick Notes instructions](https://iu.com.au/iq/app/docs/kb/resources/iq-wealth-quick-notes/).
+Sign in to IU normally if asked. You do not need GitHub, Node.js or npm.
 
-IQ Wealth normally handles installation and updates.
+The application is the **Windows ZIP download** on that page. The page's
+**Download page** button downloads instructions, not the application.
 
-The application download is a ZIP named like:
+After IQ Wealth has checked the download, use **Extract All**, then open
+**Install Quick Notes.cmd** in the extracted folder. It installs Quick Notes
+for your Windows account and adds it to the Start menu. For an update, save
+and finish any open reviews first, then run the new package's installer.
 
-```text
-IQ-Wealth-Quick-Notes-0.1.2-win-x64.zip
-```
+The installer does not move your notes, remove VS Code or change your current
+Markdown default. You can choose Quick Notes as the default later through
+Windows **Default Apps**, if you wish.
 
-It is not the Quick Notes Skill or instruction Markdown file. If the approved
-application package is temporarily unavailable, wait for IQ Wealth to restore
-it; do not install a substitute from npm.
+## Open or create a note
 
-## Adding Quick Notes to Windows
+- Start menu → **IQ Wealth Quick Notes** → choose your Markdown note.
+- Start menu → **New Quick Note** → choose where to save a new note.
+- Or right-click a Markdown file → **Open with** → **IQ Wealth Quick Notes**.
 
-Run `Register Quick Notes.cmd` from the installed package once.
+You do not need to find hidden AppData folders or select `roughdraft.cmd`.
+That name is only used internally by agents. Notes in different folders can
+be opened normally, including folders and filenames containing spaces.
 
-This adds **IQ Wealth Quick Notes** to Windows' **Open with** list. It does not
-remove VS Code or change the current Markdown default automatically. Windows
-will open its Default Apps screen, where you can choose whether Quick Notes
-should become the default for `.md` files.
+## Edit and review
 
-To remove Quick Notes from the list later, run `Remove Quick Notes.cmd`. Your
-other Markdown applications are left alone.
+Wait for **Saved** before closing an edited note. Ticking a checklist box also
+changes the file. When you finish reviewing, use the page's completion button;
+IQ Wealth should then read the saved note again, including your comments.
 
-## Opening a note
+The reading-size control makes text larger without changing the note itself.
+The welcome page's **practice note** is only a trial: its warning stays visible,
+and its changes are not saved to a file.
 
-In File Explorer, right-click a `.md` file and choose:
+Practice accepts ordinary images and PDFs. Some other attachment formats are
+blocked for safety; use a real note and ask IQ Wealth if an attachment is refused.
 
-```text
-Open with > IQ Wealth Quick Notes
-```
+## If saving fails
 
-Quick Notes opens in your usual local browser. Opera and IQ Browser are both
-supported by the normal browser workflow. Opening a note from a different
-folder uses that note's complete address; you do not need to stop Quick Notes
-or move the file first.
+Keep the page open. The copy and download actions can recover your **current
+draft**, including edits not yet saved. A downloaded copy is a separate file;
+it does not repair or overwrite the original. Ask IQ Wealth to help resolve
+the save warning before continuing.
 
-## Saving checklist changes
+## If an update causes trouble
 
-Ticking a checkbox is an edit. Wait until the page shows **Saved** before
-closing it or telling IQ Wealth that the review is finished.
+Ask IQ Wealth to check the installation. The previous verified managed version
+can be selected with **Rollback Quick Notes.cmd**. Older installations from
+before version 0.2.0 are retained, but require IQ Wealth's help for recovery.
+Your notes are not deleted by rollback.
 
-When you click **I'm done** or **Done Reviewing**, IQ Wealth should read the
-same Markdown file again and respond to your edits, checked tasks, comments and
-suggestions.
-
-## If something does not open
-
-Do not browse into hidden AppData folders or choose `roughdraft.cmd` manually.
-Ask IQ Wealth to repair the managed Quick Notes installation or rerun the
-friendly file-opener registration.
+If the approved download is unavailable, wait for IQ Wealth to restore it.
+Do not install a substitute Roughdraft package from npm.

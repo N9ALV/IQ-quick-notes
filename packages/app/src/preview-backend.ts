@@ -1,5 +1,15 @@
 import type { BackendInfo, Page, StorageBackend, StoredAsset } from "./storage";
 
+const SAFE_PRACTICE_ASSET_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "image/bmp",
+  "application/pdf",
+]);
+
 function titleFromContent(content: string, fallback: string) {
   const firstLine = content.split("\n")[0] || "";
   return firstLine.replace(/^#*\s*/, "").trim() || fallback;
@@ -70,6 +80,13 @@ export class PreviewBackend implements StorageBackend {
   }
 
   async saveAsset(file: File): Promise<StoredAsset> {
+    // Object URLs inherit this app's origin. Active documents (including SVG)
+    // must not become executable app-origin pages when opened separately.
+    if (!SAFE_PRACTICE_ASSET_TYPES.has(file.type)) {
+      throw new Error(
+        "This attachment was not added. Practice notes accept PNG, JPEG, GIF, WebP, AVIF or BMP images, and PDF files.",
+      );
+    }
     const markdownPath = nextAssetPath(this.assets, file.name);
     const previewUrl = URL.createObjectURL(file);
     this.assets.set(markdownPath, previewUrl);

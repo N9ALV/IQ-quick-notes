@@ -7,7 +7,7 @@ test.describe("in-memory preview", () => {
   }) => {
     await page.goto("/preview?editor=code");
 
-    await expect(codeEditor(page)).toContainText("Live Preview");
+    await expect(codeEditor(page)).toContainText("My practice note");
     await appendInCodeEditor(page, "\n\nPreview-only edit.");
     await expect(codeEditor(page)).toContainText("Preview-only edit.");
 
@@ -19,7 +19,7 @@ test.describe("in-memory preview", () => {
     expect(roughdraftStorageKeys).toEqual([]);
 
     await page.reload();
-    await expect(codeEditor(page)).toContainText("Live Preview");
+    await expect(codeEditor(page)).toContainText("My practice note");
     await expect(codeEditor(page)).not.toContainText("Preview-only edit.");
 
     logE2eEvent("preview.in-memory-edit", {
@@ -34,10 +34,8 @@ test.describe("in-memory preview", () => {
     await page.goto("/preview");
 
     await expect(page.getByTestId("review-handoff-button")).toHaveCount(0);
-    await expect(page.getByTestId("document-save-status")).toHaveAttribute(
-      "aria-label",
-      "Saved",
-    );
+    await expect(page.getByTestId("document-save-status")).toHaveCount(0);
+    await expect(page.getByTestId("practice-banner")).toBeVisible();
 
     logE2eEvent("preview.no-handoff-without-watcher", {
       route: "/preview",
